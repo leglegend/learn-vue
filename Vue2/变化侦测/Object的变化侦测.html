@@ -63,9 +63,9 @@
       }
     }
   }
-</script>
-<script name="depend">
+
   class Dep {
+    static target
     constructor() {
       this.subs = []
     }
@@ -123,10 +123,17 @@
       }
     })
   }
-  let data = { a: 1, b: { c: 2 } }
-  new Observer(data)
+  // let data = { a: 1, b: { c: 2 } }
+  // new Observer(data)
   // defineReactive(data, 'a', { b: { c: 1 } })
   new Watcher(data, 'a.b.c', function () {
     console.log('lalal')
   })
+
+  class Vue {
+    constructor(options) {
+      this._data = options.data
+      new Observer(this._data)
+    }
+  }
 </script>
