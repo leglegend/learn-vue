@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>响应系统</title>
+  </head>
+  <body></body>
+  <script>
+    const data = { text: 'hello world', ok: true }
+
+    // 存储被注册的副作用函数
+    let activeEffect
+    // 存储副作用函数的桶
+    const bucket = new WeakMap()
+    // 注册副作用函数的函数
+    function effect(fn) {
+      const effectFn = () => {
+        // 调用cleanup函数完成清楚工作
+        cleanup(effectFn)
+        // 当effect执行时 设置其为当前激活的副作用函数
+        activeEffect = effectFn
+
+        fn()
+      }
+      // activeEffect.deps用来存储所有与该副作用函数相关联的依赖集合
+      effectFn.deps = []
+      // 执行副作用函数
+      effectFn()
+    }
+
+    function cleanup(effectFn) {
+      for (let i = 0; i < effectFn.deps.length; i++) {
+        // deps是依赖集合
+        const deps = effectFn.deps[i]
+        // 将effectFn从依赖集合中删除
+        deps.delete(effectFn)
+      }
+      // 重置effectFn.deps数组
+      effectFn.deps.length = 0
+    }
+
+    function track(target, key) {
+      // 没有注册副作用函数 直接返回
+      if (!activeEffect) return
+      // 根据target从`桶`中取得depsMap: Map = key --> effects
+      let depsMap = bucket.get(target)
+      // 如果不存在depsMap，就新建一个Map与target关联
+      if (!depsMap) {
+        bucket.set(target, (depsMap = new Map()))
+      }
+      // 根据key从depsMap中取得deps，他是一个set，存着与key关联的effects
+      let deps = depsMap.get(key)
+      // 如果deps不存在，新建一个set并与key关联
+      if (!deps) {
+        depsMap.set(key, (deps = new Set()))
+      }
+      // 将当前激活的副作用函数添加到`桶`里
+      deps.add(activeEffect)
+      // deps就是一个与当前副作用函数存在联系的依赖集合
+      // 将其添加到 activeEffect.deps 数组中
+      activeEffect.deps.push(deps)
+      console.dir(activeEffect)
+    }
+
+    function trigger(target, key) {
+      // 根据target从桶中取得depsMap
+      const depsMap = bucket.get(target)
+
+      if (!depsMap) return
+      // 根据key取得所有副作用函数
+      const effects = depsMap.get(key)
+      // 通过effects创建一个新集合，避免无限循环
+      const effectsToRun = new Set(effects)
+      // 执行所有副作用函数
+      effectsToRun.forEach((effectFn) => effectFn())
+    }
+
+    const obj = new Proxy(data, {
+      // 拦截读取操作
+      get(target, key) {
+        track(target, key)
+        return target[key]
+      },
+      // 拦截设置操作
+      set(target, key, newVal) {
+        target[key] = newVal
+        trigger(target, key, newVal)
+      }
+    })
+
+    effect(function effectFn() {
+      document.body.innerText = obj.ok ? obj.text : 'not'
+    })
+    setTimeout(() => {
+      obj.text = 'hahah'
+    }, 2000)
+  </script>
+</html>
