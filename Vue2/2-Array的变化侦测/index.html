@@ -63,32 +63,37 @@
     </script>
     <script name="array">
       const arrayProto = Array.prototype
-      const arrayMethods = Object.create(arrayProto, {
-        a: { value: 1, enumerable: true }
+      const arrayMethods = Object.create(arrayProto)
+      const methodsToPatch = [
+        'push',
+        'pop',
+        'shift',
+        'unshift',
+        'splice',
+        'sort',
+        'reverse'
+      ]
+      methodsToPatch.forEach((method) => {
+        // 缓存原始方法
+        const original = arrayProto[method]
+        def(arrayMethods, method, function mutator(...args) {
+          const result = original.apply(this, args)
+          const ob = this.__ob__
+          let inserted // 新增的数组元素
+          switch (method) {
+            case 'push':
+            case 'unshift':
+              inserted = args
+              break
+            case 'splice':
+              inserted = args.slice(2)
+              break
+          }
+          if (inserted) ob.observeArray(inserted) // 侦听新增数组
+          ob.dep.notify() // 向依赖发送消息
+          return result
+        })
       })
-      ;['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse'].forEach(
-        (method) => {
-          // 缓存原始方法
-          const original = arrayProto[method]
-          def(arrayMethods, method, function mutator(...args) {
-            const result = original.apply(this, args)
-            const ob = this.__ob__
-            let inserted // 新增的数组元素
-            switch (method) {
-              case 'push':
-              case 'unshift':
-                inserted = args
-                break
-              case 'splice':
-                inserted = args.slice(2)
-                break
-            }
-            if (inserted) ob.observeArray(inserted) // 侦听新增数组
-            ob.dep.notify() // 向依赖发送消息
-            return result
-          })
-        }
-      )
     </script>
     <script name="observer">
       // __proto__是否可用
@@ -102,10 +107,12 @@
           def(value, '__ob__', this)
 
           if (Array.isArray(value)) {
+            if (hasProto) {
+              protoAugment(value, arrayMethods)
+            } else {
+              copyAgument(value, arrayMethods, arrayKeys)
+            }
             this.observeArray(value)
-            const augment = hasProto ? protoAugment : copyAgument
-            augment(value, arrayMethods, arrayKeys)
-            value.__proto__ = arrayMethods
           } else {
             this.walk(value)
           }
@@ -195,7 +202,7 @@
     <script name="reactive">
       function defineReactive(data, key, val) {
         let childOb = observe(val)
-        let dep = new Dep()
+        const dep = new Dep()
         Object.defineProperty(data, key, {
           enumerable: true,
           configurable: true,
