@@ -63,7 +63,9 @@
       }
     }
   }
+</script>
 
+<script name="depend">
   class Dep {
     static target
     constructor() {
@@ -102,7 +104,7 @@
   }
 </script>
 
-<script>
+<script name="reactive">
   function defineReactive(data, key, val) {
     if (typeof val === 'object') {
       new Observer(val)
@@ -117,23 +119,46 @@
       },
       set: function (newVal) {
         if (val === newVal) return
-        // 新增
-        dep.notify()
         val = newVal
+        dep.notify()
       }
     })
   }
-  // let data = { a: 1, b: { c: 2 } }
-  // new Observer(data)
-  // defineReactive(data, 'a', { b: { c: 1 } })
-  new Watcher(data, 'a.b.c', function () {
-    console.log('lalal')
-  })
+</script>
+
+<script>
+  // 代理
+  function _proxy(data) {
+    const that = this
+    Object.keys(data).forEach((key) => {
+      Object.defineProperty(that, key, {
+        configurable: true,
+        enumerable: true,
+        get: function proxyGetter() {
+          return that._data[key]
+        },
+        set: function proxySetter(val) {
+          that._data[key] = val
+        }
+      })
+    })
+  }
 
   class Vue {
     constructor(options) {
       this._data = options.data
       new Observer(this._data)
+      _proxy.call(this, options.data)
     }
   }
+
+  const app = new Vue({
+    data: {
+      text: 'hello world'
+    }
+  })
+
+  new Watcher(app, 'text', (newVal, oldValue) => {
+    console.log('text被修改了', `${oldValue} => ${newVal}`)
+  })
 </script>
