@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="vnode">
+      class VNode {
+        constructor(
+          tag,
+          data,
+          children,
+          text,
+          elm,
+          context,
+          componentOptions, // 组件节点选项信息
+          asyncFactory
+        ) {}
+
+        get child() {
+          return this.componentInstance // 组件实例
+        }
+      }
+    </script>
+    <script>
+      function createEmptyVNode(text) {
+        const node = new VNode()
+        node.text = text
+        nodee.isComment = true
+        return node
+      }
+      function createTextVNode(val) {
+        return new VNode(undefined, undefined, undefined, String(val))
+      }
+      function cloneVNode(vnode, deep) {
+        const cloned = new VNode(
+          vnode.tag,
+          vnode.data,
+          vnode.children,
+          vnode.text,
+          vnode.elm,
+          vnode.context,
+          vnode.componentOptions,
+          vnode.asyncFactory
+        )
+        cloned.ns = vnode.ns
+        cloned.isStatic = vnode.isStatic
+        cloned.key = vnode.key
+        cloned.isComment = vnode.isComment
+        cloned.isCloned = true // 唯一区别
+        if (deep && vnode.children) {
+          cloned.children = cloneVNodes(vnode.children)
+        }
+        return cloned
+      }
+    </script>
+  </body>
+</html>
