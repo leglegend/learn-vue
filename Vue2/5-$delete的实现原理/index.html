@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="utils">
+      // 工具函数
+      // 定义属性
+      function def(obj, key, val, enumerable) {
+        Object.defineProperty(obj, key, {
+          value: val,
+          enumerable: !!enumerable,
+          writable: true,
+          configurable: true
+        })
+      }
+      // 判断是否为object
+      function isObject(obj) {
+        return obj !== null && typeof obj === 'object'
+      }
+
+      // 是否是有效的数组下标
+      function isValidArrayIndex(val) {
+        var n = parseFloat(String(val))
+        return n >= 0 && Math.floor(n) === n && isFinite(val)
+      }
+    </script>
+    <script name="array">
+      const arrayProto = Array.prototype
+      const arrayMethods = Object.create(arrayProto)
+      const methodsToPatch = [
+        'push',
+        'pop',
+        'shift',
+        'unshift',
+        'splice',
+        'sort',
+        'reverse'
+      ]
+      methodsToPatch.forEach((method) => {
+        // 缓存原始方法
+        const original = arrayProto[method]
+        def(arrayMethods, method, function mutator(...args) {
+          const result = original.apply(this, args)
+          const ob = this.__ob__
+          let inserted // 新增的数组元素
+          switch (method) {
+            case 'push':
+            case 'unshift':
+              inserted = args
+              break
+            case 'splice':
+              inserted = args.slice(2)
+              break
+          }
+          if (inserted) ob.observeArray(inserted) // 侦听新增数组
+          ob.dep.notify() // 向依赖发送消息
+          return result
+        })
+      })
+    </script>
+    <script name="watcher">
+      let uid = 0
+
+      class Watcher {
+        vm
+        cb // 回调函数
+        deps // 哪些dep收集了自己
+        depIds // 那些收集了自己的dep的id
+        getter // 调用getter可以触发一次读取操作
+        deep
+        value
+
+        constructor(vm, expOrFn, cb, options) {
+          this.vm = vm
+
+          if (options) {
+            this.deep = !!options.deep
+          } else {
+            this.deep = false
+          }
+
+          this.deps = []
+          this.depIds = new Set()
+          // 执行this.getter() 可以读取expOrFn的值
+          // expOrFn参数支持函数
+          if (typeof expOrFn === 'function') {
+            this.getter = expOrFn
+          } else {
+            this.getter = parsePath(expOrFn)
+          }
+          this.cb = cb
+          this.value = this.get()
+        }
+
+        get() {
+          window.target = this
+          // 读取getter的值 会触发defineReactive中的getter
+          let value = this.getter.call(this.vm, this.vm)
+          if (this.deep) {
+            traverse(value)
+          }
+          window.target = undefined
+          return value
+        }
+
+        update() {
+          const oldValue = this.value
+          this.value = this.get()
+          this.cb.call(this.vm, this.value, oldValue)
+        }
+
+        addDep(dep) {
+          const id = dep.id
+          if (!this.depIds.has(id)) {
+            this.depIds.add(id)
+            this.deps.push(dep)
+            dep.addSub(this)
+          }
+        }
+        // 从所有依赖项的Dep列表中将自己移除
+        teardown() {
+          let i = this.dep.length
+          while (i--) {
+            this.deps[i].removeSub(this)
+          }
+        }
+      }
+      const bailRE = /[^\w.$]/
+      function parsePath(path) {
+        if (bailRE.test(path)) {
+          return
+        }
+        const segments = path.split('.')
+        return function (obj) {
+          for (let i = 0; i < segments.length; i++) {
+            if (!obj) return
+            obj = obj[segments[i]]
+          }
+          return obj
+        }
+      }
+
+      const seenObjects = new Set()
+
+      // 递归调用每一个子项，触发一次getter
+      function traverse(val) {
+        _traverse(val, seenObjects)
+        seenObject = new Set()
+      }
+      function _traverse(val, seen) {
+        let i, keysconst
+        const isA = Array.isArray(val)
+        if ((!isA && !isObject(val)) || Object.isFrozen(val)) {
+          return
+        }
+        if (val.__ob__) {
+          const depId = val.__ob__.dep.id
+          if (seen.has(depId)) {
+            return
+          }
+          seen.add(depId)
+        }
+        if (isA) {
+          i = val.length
+          while (i--) _traverse(val[i], seen)
+        } else {
+          keys = Object.keys(val)
+          i = keys.length
+          while (i--) _traverse(val[keys[i]], seen)
+          //         就是在这里触发的 ↑
+        }
+      }
+    </script>
+    <script name="observer">
+      // __proto__是否可用
+      const hasProto = '__proto__' in {}
+      const arrayKeys = Object.getOwnPropertyNames(arrayMethods)
+
+      class Observer {
+        constructor(value) {
+          this.value = value
+          this.dep = new Dep()
+          def(value, '__ob__', this)
+
+          if (Array.isArray(value)) {
+            if (hasProto) {
+              protoAugment(value, arrayMethods)
+            } else {
+              copyAgument(value, arrayMethods, arrayKeys)
+            }
+            this.observeArray(value)
+          } else {
+            this.walk(value)
+          }
+        }
+        // 侦测Array中的每一项
+        observeArray(items) {
+          for (let i = 0, l = items.length; i < l; i++) {
+            observe(items[i])
+          }
+        }
+        // 把每一个属性转换为getter/setter的形式，只有数据为object才调用
+        walk(obj) {
+          const keys = Object.keys(obj)
+          for (let i = 0; i < keys.length; i++) {
+            defineReactive(obj, keys[i], obj[keys[i]])
+          }
+        }
+      }
+
+      function protoAugment(target, src, keys) {
+        target.__proto__ = src
+      }
+      function copyAgument(target, src, keys) {
+        for (let i = 0, l = keys.length; i < l; i++) {
+          const key = keys[i]
+          def(target, key, src[key])
+        }
+      }
+
+      // 尝试为value创建一个Observer实例，
+      // 创建成功，则直接返回新创建的Observer实例，
+      // 如果value已存在一个Observer实例，则直接返回它
+      function observe(value, asRootData) {
+        if (!isObject(value)) {
+          return
+        }
+        let ob
+        if (
+          value.hasOwnProperty('__ob__') &&
+          value.__ob__ instanceof Observer
+        ) {
+          ob = value.__ob__
+        } else {
+          ob = new Observer(value)
+        }
+        return ob
+      }
+    </script>
+    <script name="depend">
+      class Dep {
+        static target
+        id
+        subs
+
+        constructor() {
+          this.id = uid++
+          this.subs = []
+        }
+
+        addSub(sub) {
+          this.subs.push(sub)
+        }
+
+        removeSub(sub) {
+          remove(this.subs, sub)
+        }
+
+        depend() {
+          if (window.target) {
+            window.target.addDep(this)
+          }
+        }
+
+        notify() {
+          const subs = this.subs.slice()
+          for (let i = 0, l = subs.length; i < l; i++) {
+            subs[i].update()
+          }
+        }
+      }
+
+      function remove(arr, item) {
+        if (arr.length) {
+          const index = arr.indexOf(item)
+          if (index > -1) {
+            return arr.splice(index, 1)
+          }
+        }
+      }
+    </script>
+    <script name="reactive">
+      function defineReactive(data, key, val) {
+        // 数组改变不触发setter，所以需要通过childOb实现对操作的监听
+        let childOb = observe(val)
+        const dep = new Dep()
+        Object.defineProperty(data, key, {
+          enumerable: true,
+          configurable: true,
+          get: function () {
+            dep.depend()
+            if (childOb) {
+              childOb.dep.depend()
+            }
+            return val
+          },
+          set: function (newVal) {
+            if (val === newVal) return
+            val = newVal
+            dep.notify()
+          }
+        })
+      }
+    </script>
+    <script name="vue">
+      // 代理
+      function _proxy(data) {
+        const that = this
+        Object.keys(data).forEach((key) => {
+          Object.defineProperty(that, key, {
+            configurable: true,
+            enumerable: true,
+            get: function proxyGetter() {
+              return that._data[key]
+            },
+            set: function proxySetter(val) {
+              that._data[key] = val
+            }
+          })
+        })
+      }
+
+      class Vue {
+        constructor(options) {
+          this._data = options.data
+          new Observer(this._data)
+          _proxy.call(this, options.data)
+        }
+      }
+    </script>
+    <script name="watch">
+      Vue.prototype.$watch = function (expOrFn, cb, options) {
+        const vm = this
+        options = options || {}
+        const watcher = new Watcher(vm, expOrFn, cb, options)
+        if (options.immediate) {
+          cb.call(vm, watcher.value)
+        }
+        return function unwatchFn() {
+          watcher.teardown()
+        }
+      }
+    </script>
+    <script name="set">
+      Vue.prototype.$set = function (target, key, val) {
+        // 通过下标修改数组，转换为通过splice修改
+        if (Array.isArray(target) && isValidArrayIndex(key)) {
+          target.length = Math.max(target.length, key)
+          target.splice(key, 1, val)
+          return val
+        }
+
+        // 已存在的属性，修改后直接返回
+        if (key in target && !(key in Object.prototype)) {
+          target[key] = val
+          return val
+        }
+
+        // 新增属性
+        const ob = target.__ob__
+        if (target._isVue || (ob && ob.vmCount)) {
+          console.warn('target不能是Vue实例或者Vue实例的根数据对象')
+          return val
+        }
+
+        // target本身不是响应式
+        if (!ob) {
+          target[key] = val
+          return val
+        }
+
+        // 将target[key]转换为响应式
+        defineReactive(ob.value, key, val)
+        ob.dep.notify()
+        return val
+      }
+    </script>
+    <script name="delete">
+      Vue.prototype.$delete = function (target, key) {
+        // 处理数组
+        if (Array.isArray(target) && isValidArrayIndex(key)) {
+          target.splice(key, 1)
+          return
+        }
+
+        const ob = target.__ob__
+        if (target._isVue || (ob && ob.vmCount)) {
+          console.warn('target不能是Vue实例或者Vue实例的根数据对象')
+          return
+        }
+
+        // 如果key不是target的自身属性，直接返回
+        if (!target.hasOwnProperty(key)) {
+          return
+        }
+
+        delete target[key]
+        // 不存在ob 即target是分响应式 直接返回
+        if (!ob) return
+        ob.dep.notify()
+      }
+    </script>
+    <script>
+      const vm = new Vue({
+        data: {
+          text: 'hello world',
+          a: { b: 1 },
+          array: [1, 2, 3]
+        }
+      })
+
+      vm.$set(vm.a, 'c', 3)
+
+      vm.$watch(
+        'array',
+        function (newval, oldVal) {
+          console.log('text被修改了', newval, oldVal)
+        },
+        {
+          immediate: true,
+          deep: true
+        }
+      )
+    </script>
+  </body>
+</html>
