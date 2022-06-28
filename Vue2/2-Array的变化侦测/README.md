@@ -24,10 +24,11 @@ B-->C{是否是Object?}
 C-->|是|D(Data getter/setter)
 C-->|否|F(修改数组原型对象 侦听数组每个元素)
 F-->E(Data getter/arrayMethods)
-D-->|收集依赖|G(Watcher)
-D-->|通知依赖|G(Watcher)
-E-->|收集依赖|G(Watcher)
-E-->|通知依赖|G(Watcher)
+D-->|收集依赖|I
+D-->|通知依赖|I
+E-->|收集依赖|I
+E-->|通知依赖|I
 E-->|添加新元素|C
+I(Dep)-->|执行依赖|G(Watcher)
 G-->H(外界)
 ```

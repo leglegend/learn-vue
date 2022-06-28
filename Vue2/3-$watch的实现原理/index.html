@@ -32,6 +32,7 @@
         deps // 哪些dep收集了自己
         depIds // 那些收集了自己的dep的id
         getter // 调用getter可以触发一次读取操作
+        deep
         value
 
         constructor(vm, expOrFn, cb, options) {
@@ -45,7 +46,7 @@
 
           this.deps = []
           this.depIds = new Set()
-          // 执行this.getter() 可以读取data.a.b.c的值
+          // 执行this.getter() 可以读取expOrFn的值
           // expOrFn参数支持函数
           if (typeof expOrFn === 'function') {
             this.getter = expOrFn
@@ -58,6 +59,7 @@
 
         get() {
           window.target = this
+          // 读取getter的值 会触发defineReactive中的getter
           let value = this.getter.call(this.vm, this.vm)
           if (this.deep) {
             traverse(value)
@@ -105,6 +107,7 @@
 
       const seenObjects = new Set()
 
+      // 递归调用每一个子项，触发一次getter
       function traverse(val) {
         _traverse(val, seenObjects)
         seenObject = new Set()
@@ -128,7 +131,8 @@
         } else {
           keys = Object.keys(val)
           i = keys.length
-          while (i--) _traverse(val[(keys[i], seen)])
+          while (i--) _traverse(val[keys[i]], seen)
+          //         就是在这里触发的 ↑
         }
       }
     </script>
@@ -253,7 +257,6 @@
 
         depend() {
           if (window.target) {
-            // this.addSub(window.target)
             window.target.addDep(this)
           }
         }
@@ -277,6 +280,7 @@
     </script>
     <script name="reactive">
       function defineReactive(data, key, val) {
+        // 数组改变不触发setter，所以需要通过childOb实现对操作的监听
         let childOb = observe(val)
         const dep = new Dep()
         Object.defineProperty(data, key, {
@@ -340,16 +344,12 @@
       const vm = new Vue({
         data: {
           text: 'hello world',
-          a: {
-            b: {
-              c: 1
-            }
-          }
+          a: { b: 1 }
         }
       })
 
       vm.$watch(
-        'text',
+        'a',
         function (newval, oldVal) {
           console.log('text被修改了', newval, oldVal)
         },
