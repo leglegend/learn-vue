@@ -26,15 +26,18 @@
       }
     </script>
     <script>
+      // 注释节点
       function createEmptyVNode(text) {
         const node = new VNode()
         node.text = text
         nodee.isComment = true
         return node
       }
+      // 文本节点
       function createTextVNode(val) {
         return new VNode(undefined, undefined, undefined, String(val))
       }
+      // 克隆节点
       function cloneVNode(vnode, deep) {
         const cloned = new VNode(
           vnode.tag,
@@ -55,6 +58,25 @@
           cloned.children = cloneVNodes(vnode.children)
         }
         return cloned
+      }
+      function removeVnodes(vnodes, startIdx, endIdx) {
+        for (; startIdx <= endIdx; ++startIdx) {
+          const ch = vnode[startIdx]
+          if (isDef(ch)) {
+            removeNode(ch.elm)
+          }
+        }
+      }
+      const nodeOps = {
+        removeChild(node, child) {
+          node.removeChild(child)
+        }
+      }
+      function removeNode(el) {
+        const parent = nodeOps.parentNode(el)
+        if (isDef(parent)) {
+          nodeOps.removeChild(parent, el)
+        }
       }
     </script>
   </body>

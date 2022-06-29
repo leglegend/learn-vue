@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="html-parser">
+      const ncname = '[a-zA-Z_][\\w\\-\\.]*'
+      const qnameCapture = `((?:${ncname}\\:)?${ncname})`
+      // 以开始标签开始的模板
+      const startTagOpen = new RegExp(`^<${qnameCapture}`)
+      const startTagClose = /^\s*(\/?)/
+
+      function parseHTML(html, options) {
+        while (html) {
+          let text
+          // 确保没有在script/style标签下，如果父元素是script/style，
+          // 则会把整个标签下的内容当作字符串触发chars事件
+
+          // 判断<在html中的位置
+          let textEnd = html.indexOf('<')
+
+          // <在开头 说明是一个标签的开始
+          if (textEnd === 0) {
+            // 是否是注释 yes:调用comment continue
+            // 是否是条件注释 yes:删除这段 continue
+            // 是否是Doctype yes:删除这段 continue
+            // 是否是开始标签
+            const startTagMatch = parseStartTag() // 解析标签名，标签属性
+            if (startTagMatch) {
+              // 触发start
+              handleStartTag(startTagMatch)
+              continue
+            }
+          }
+
+          // <不在开头
+          if (textEnd >= 0) {
+            // 判断<是否是text
+            text = html.substring(0, textEnd)
+          }
+
+          if (textEnd < 0) {
+            text = html
+          }
+
+          if (text) {
+            // text有值 截取html
+            advance(text.length)
+          }
+
+          // 触发charts
+          if (options.chars && text) {
+            options.chars(text, index - text.length, index)
+          }
+        }
+
+        function advance(n) {
+          index += n
+          html = html.substring(n)
+        }
+
+        function parseStartTag() {
+          // 解析标签名，判断模板是否符合开始标签的特征
+          const start = html.match(startTagOpen)
+          if (start) {
+            const match = {
+              tagName: start[1],
+              attrs: []
+            }
+            advance(start[0].length)
+
+            // 解析标签属性
+            let end, attr
+            while (
+              !(end = html.match(startTagClose)) &&
+              (attr = html.match(attribute))
+            ) {
+              advance(attr[0].length)
+              match.attrs.push(attr)
+            }
+
+            // 判断该标签是否是自闭合标签
+            if (end) {
+              match.unarySlash = end[1]
+              advance(end[0].length)
+              return match
+            }
+          }
+        }
+      }
+    </script>
+    <script>
+      let template = `
+      <div>
+        <p>my name is {{name}}</p>
+      </div>
+      `
+      parseHTML(template, {
+        // 标签名 标签属性 是否自闭和
+        statr(tag, attrs, unary) {
+          // 解析到标签开始位置时触发
+        },
+        end() {
+          // 解析到标签结束位置时触发
+        },
+        chars(text) {
+          // 解析到文本时触发
+          text = text.trim()
+          if (text) {
+            const children = currentParent.children
+            let expression
+            if ((expression = parseText(text))) {
+              // 变量文本
+              children.push({
+                type: 2,
+                expression,
+                text
+              })
+            } else {
+              // 纯文本
+              children.push({
+                type: 3,
+                text
+              })
+            }
+          }
+        },
+        comment(text) {
+          // 解析到注释时触发
+        }
+      })
+
+      function parseText(text) {
+        const tagRE = /\{\{((?:.|\r?\n)+?)\}\}/g
+        if (!tagRE.test(text)) {
+          return
+        }
+
+        const tokens = []
+        let lastIndex = (tagRE.lastIndex = 0)
+        let matcg, index
+        while ((match = tagRE.exec(text))) {
+          index = match.index
+          // 先把双括号前面的内容添加到tokens中
+          if (index > lastIndex) {
+            tokens.push(JSON.stringify(text.slice(lastIndex, index)))
+          }
+          // 把变量改成_s(x) 这样的形势添加到数组中
+          tokens.push(`_s(${match[1].trim()})`)
+          // 设置lastIndex来保证下一轮循环时，正则表达式不再重复匹配已经解析过的文本
+          lastIndex = index + match[0].length
+        }
+
+        // 当所有变量都处理完毕后，如果最后一个变量右边还有文本，就将文本添加到数组中
+        if (lastIndex < text.length) {
+          yoken.push(JSON.stringify(text.slice(lastIndex)))
+        }
+        return token.join('+')
+      }
+    </script>
+  </body>
+</html>
