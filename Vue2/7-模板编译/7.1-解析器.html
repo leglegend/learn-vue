@@ -13,6 +13,10 @@
       // 以开始标签开始的模板
       const startTagOpen = new RegExp(`^<${qnameCapture}`)
       const startTagClose = /^\s*(\/?)/
+      // 结束标签
+      const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`)
+
+      let index = 0
 
       function parseHTML(html, options) {
         while (html) {
@@ -28,11 +32,23 @@
             // 是否是注释 yes:调用comment continue
             // 是否是条件注释 yes:删除这段 continue
             // 是否是Doctype yes:删除这段 continue
+
+            // 是否是结束标签
+            const endTagMatch = html.match(endTag)
+            if (endTagMatch) {
+              const curIndex = index
+              advance(endTagMatch[0].length)
+              parseEndTag(endTagMatch[1], curIndex, index)
+              continue
+            }
+
             // 是否是开始标签
             const startTagMatch = parseStartTag() // 解析标签名，标签属性
             if (startTagMatch) {
               // 触发start
               handleStartTag(startTagMatch)
+              // 去掉开始标签最后一个>
+              advance(1)
               continue
             }
           }
@@ -91,6 +107,36 @@
             }
           }
         }
+        function handleStartTag(match) {
+          const tagName = match.tagName
+
+          // 判断是否为自闭和标签，这里为了代码简单就不考虑了
+          const unary = false
+
+          // 加工属性
+          const l = match.attrs.length
+          const attrs = new Array(l)
+
+          // 推入栈
+          if (!unary) {
+            // stack.push({
+            //   tag: tagName,
+            //   attrs: attrs,
+            //   start: match.start,
+            //   end: match.end
+            // })
+          }
+
+          // 触发开始事件
+          if (options.start) {
+            options.start(tagName, attrs, unary, match.start, match.end)
+          }
+        }
+        function parseEndTag(tagName, start, end) {
+          if (options.end) {
+            options.end(tagName, start, end)
+          }
+        }
       }
     </script>
     <script>
@@ -99,13 +145,41 @@
         <p>my name is {{name}}</p>
       </div>
       `
-      parseHTML(template, {
+      const stack = []
+      let root
+      let currentParent
+
+      parseHTML(template.trim(), {
         // 标签名 标签属性 是否自闭和
-        statr(tag, attrs, unary) {
+        start(tag, attrs, unary) {
           // 解析到标签开始位置时触发
+
+          // 创建一个AST节点
+          let element = createASTElement(tag, attrs, currentParent)
+
+          // 如果没有根节点 则把当前节点作为根节点
+          if (!root) {
+            root = element
+          }
+
+          // 判断是否自闭和
+          if (!unary) {
+            currentParent = element
+            stack.push(element)
+          } else {
+            closeElement(element)
+          }
         },
-        end() {
+        end(tag, start, end) {
           // 解析到标签结束位置时触发
+
+          // 当前节点为栈中最后一个节点
+          const element = stack[stack.length - 1]
+          // 出栈
+          stack.length -= 1
+          debugger
+          currentParent = stack[stack.length - 1]
+          closeElement(element)
         },
         chars(text) {
           // 解析到文本时触发
@@ -133,7 +207,7 @@
           // 解析到注释时触发
         }
       })
-
+      console.log(root)
       function parseText(text) {
         const tagRE = /\{\{((?:.|\r?\n)+?)\}\}/g
         if (!tagRE.test(text)) {
@@ -159,7 +233,24 @@
         if (lastIndex < text.length) {
           yoken.push(JSON.stringify(text.slice(lastIndex)))
         }
-        return token.join('+')
+
+        return tokens.join('+')
+      }
+      function createASTElement(tag, attrs, parent) {
+        return {
+          type: 1,
+          tag,
+          attrsList: attrs,
+          rawAttrsMap: {},
+          parent,
+          children: []
+        }
+      }
+      function closeElement(element) {
+        if (currentParent) {
+          currentParent.children.push(element)
+          element.parent = currentParent
+        }
       }
     </script>
   </body>

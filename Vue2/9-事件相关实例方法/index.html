@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script>
+      class Vue {
+        constructor(options) {
+          this._data = options.data
+        }
+      }
+
+      Vue.prototype.$on = function (event, fn) {
+        const vm = this
+        if (Array.isArray(event)) {
+          for (let i = 0, l = event.length; i < l; i++) {
+            this.$on(event[i], fn)
+          }
+        } else {
+          ;(vm._events[event] || (vm._events = [])).push(fn)
+        }
+        return vm
+      }
+    </script>
+  </body>
+</html>

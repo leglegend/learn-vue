@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="html-parser">
+      const ncname = '[a-zA-Z_][\\w\\-\\.]*'
+      const qnameCapture = `((?:${ncname}\\:)?${ncname})`
+      // 以开始标签开始的模板
+      const startTagOpen = new RegExp(`^<${qnameCapture}`)
+      const startTagClose = /^\s*(\/?)/
+      // 结束标签
+      const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`)
+
+      let index = 0
+
+      function parseHTML(html, options) {
+        while (html) {
+          let text
+          // 确保没有在script/style标签下，如果父元素是script/style，
+          // 则会把整个标签下的内容当作字符串触发chars事件
+
+          // 判断<在html中的位置
+          let textEnd = html.indexOf('<')
+
+          // <在开头 说明是一个标签的开始
+          if (textEnd === 0) {
+            // 是否是注释 yes:调用comment continue
+            // 是否是条件注释 yes:删除这段 continue
+            // 是否是Doctype yes:删除这段 continue
+
+            // 是否是结束标签
+            const endTagMatch = html.match(endTag)
+            if (endTagMatch) {
+              const curIndex = index
+              advance(endTagMatch[0].length)
+              parseEndTag(endTagMatch[1], curIndex, index)
+              continue
+            }
+
+            // 是否是开始标签
+            const startTagMatch = parseStartTag() // 解析标签名，标签属性
+            if (startTagMatch) {
+              // 触发start
+              handleStartTag(startTagMatch)
+              // 去掉开始标签最后一个>
+              advance(1)
+              continue
+            }
+          }
+
+          // <不在开头
+          if (textEnd >= 0) {
+            // 判断<是否是text
+            text = html.substring(0, textEnd)
+          }
+
+          if (textEnd < 0) {
+            text = html
+          }
+
+          if (text) {
+            // text有值 截取html
+            advance(text.length)
+          }
+
+          // 触发charts
+          if (options.chars && text) {
+            options.chars(text, index - text.length, index)
+          }
+        }
+
+        function advance(n) {
+          index += n
+          html = html.substring(n)
+        }
+
+        function parseStartTag() {
+          // 解析标签名，判断模板是否符合开始标签的特征
+          const start = html.match(startTagOpen)
+          if (start) {
+            const match = {
+              tagName: start[1],
+              attrs: []
+            }
+            advance(start[0].length)
+
+            // 解析标签属性
+            let end, attr
+            while (
+              !(end = html.match(startTagClose)) &&
+              (attr = html.match(attribute))
+            ) {
+              advance(attr[0].length)
+              match.attrs.push(attr)
+            }
+
+            // 判断该标签是否是自闭合标签
+            if (end) {
+              match.unarySlash = end[1]
+              advance(end[0].length)
+              return match
+            }
+          }
+        }
+        function handleStartTag(match) {
+          const tagName = match.tagName
+
+          // 判断是否为自闭和标签，这里为了代码简单就不考虑了
+          const unary = false
+
+          // 加工属性
+          const l = match.attrs.length
+          const attrs = new Array(l)
+
+          // 推入栈
+          if (!unary) {
+            // stack.push({
+            //   tag: tagName,
+            //   attrs: attrs,
+            //   start: match.start,
+            //   end: match.end
+            // })
+          }
+
+          // 触发开始事件
+          if (options.start) {
+            options.start(tagName, attrs, unary, match.start, match.end)
+          }
+        }
+        function parseEndTag(tagName, start, end) {
+          if (options.end) {
+            options.end(tagName, start, end)
+          }
+        }
+      }
+    </script>
+    <script>
+      let template = `
+      <div>
+        <p>my name is {{name}}</p>
+      </div>
+      `
+      const stack = []
+      let root
+      let currentParent
+
+      parseHTML(template.trim(), {
+        // 标签名 标签属性 是否自闭和
+        start(tag, attrs, unary) {
+          // 解析到标签开始位置时触发
+
+          // 创建一个AST节点
+          let element = createASTElement(tag, attrs, currentParent)
+
+          // 如果没有根节点 则把当前节点作为根节点
+          if (!root) {
+            root = element
+          }
+
+          // 判断是否自闭和
+          if (!unary) {
+            currentParent = element
+            stack.push(element)
+          } else {
+            closeElement(element)
+          }
+        },
+        end(tag, start, end) {
+          // 解析到标签结束位置时触发
+
+          // 当前节点为栈中最后一个节点
+          const element = stack[stack.length - 1]
+          // 出栈
+          stack.length -= 1
+          debugger
+          currentParent = stack[stack.length - 1]
+          closeElement(element)
+        },
+        chars(text) {
+          // 解析到文本时触发
+          text = text.trim()
+          if (text) {
+            const children = currentParent.children
+            let expression
+            if ((expression = parseText(text))) {
+              // 变量文本
+              children.push({
+                type: 2,
+                expression,
+                text
+              })
+            } else {
+              // 纯文本
+              children.push({
+                type: 3,
+                text
+              })
+            }
+          }
+        },
+        comment(text) {
+          // 解析到注释时触发
+        }
+      })
+      console.log(root)
+      function parseText(text) {
+        const tagRE = /\{\{((?:.|\r?\n)+?)\}\}/g
+        if (!tagRE.test(text)) {
+          return
+        }
+
+        const tokens = []
+        let lastIndex = (tagRE.lastIndex = 0)
+        let matcg, index
+        while ((match = tagRE.exec(text))) {
+          index = match.index
+          // 先把双括号前面的内容添加到tokens中
+          if (index > lastIndex) {
+            tokens.push(JSON.stringify(text.slice(lastIndex, index)))
+          }
+          // 把变量改成_s(x) 这样的形势添加到数组中
+          tokens.push(`_s(${match[1].trim()})`)
+          // 设置lastIndex来保证下一轮循环时，正则表达式不再重复匹配已经解析过的文本
+          lastIndex = index + match[0].length
+        }
+
+        // 当所有变量都处理完毕后，如果最后一个变量右边还有文本，就将文本添加到数组中
+        if (lastIndex < text.length) {
+          yoken.push(JSON.stringify(text.slice(lastIndex)))
+        }
+
+        return tokens.join('+')
+      }
+      function createASTElement(tag, attrs, parent) {
+        return {
+          type: 1, // 1:元素节点 2:带变量的动态文本节点 3:不带变量的纯文本节点
+          tag,
+          attrsList: attrs,
+          rawAttrsMap: {},
+          parent,
+          children: []
+        }
+      }
+      function closeElement(element) {
+        if (currentParent) {
+          currentParent.children.push(element)
+          element.parent = currentParent
+        }
+      }
+    </script>
+    <script name="optimize">
+      function optimize(root) {
+        if (!root) return
+        // 第一步：标记所有静态节点
+        markStatic(root)
+        // 第二步：标记所有静态根节点
+        markStaticRoots(root)
+      }
+
+      function markStatic(node) {
+        node.static = isStatic(node)
+        if (node.type === 1) {
+          for (let i = 0, l = node.children.length; i < l; i++) {
+            const child = node.children[i]
+            markStatic(child)
+
+            if (!child.static) {
+              node.static = false
+            }
+          }
+        }
+      }
+
+      function markStaticRoots(node) {
+        if (node.type === 1) {
+          // 要使节点符合静态根节点的要求，它必须是子节点
+          // 这个子节点不能是只有一个静态文本的子节点，否则优化成本超过收益
+          if (
+            node.static &&
+            node.chldren.length &&
+            !(node.children.length === 1 && node.children[0].type === 3)
+          ) {
+            node.staticRoot = true // 标记为静态根节点后 不会再看子节点
+            return
+          } else {
+            node.staticRoot = false
+          }
+          if (node.children) {
+            for (let i = 0, l = node.children.length; i < l; i++) {
+              markStaticRoots(node.children[i])
+            }
+          }
+        }
+      }
+
+      function isStatic(node) {
+        if (node.type === 2) {
+          // 带变量的动态文本节点
+          return false
+        }
+        if (node.type === 3) {
+          // 不带变量的纯文本节点
+          return true
+        }
+        return !!(
+          node.pre || // 有v-pre指令
+          (!node.hasBindings && // 没有动态绑定
+            !node.if &&
+            !node.for && // 没有v-if或v-for或v-else
+            !isBuiltInTag(node.tag) && // 不是内置标签 solt/component
+            isPlatformReservedTag(node.tag) && // 不是组件
+            !isDirectChildOfTemplateFor(node) && // 父节点没有v-for
+            Object.kesy(node).every(isStaticKey))
+        )
+      }
+    </script>
+  </body>
+</html>
