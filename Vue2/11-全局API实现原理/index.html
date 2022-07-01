@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="extend">
+      let cid = 1
+      class Vue {}
+      Vue.extend = function (extendOptions) {
+        extendOptions = extendOptions || {}
+        const Super = this
+        const SuperId = Super.cid
+        const cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {})
+
+        if (cachedCtors[SuperId]) {
+          return cachedCtors[SuperId]
+        }
+        const name = extendOptions.name || Super.options.name
+        const Sub = function VueComponent(options) {
+          this._init(options)
+        }
+
+        Sub.prototype = Object.create(Super.prototype)
+        Sub.prototype.constructor = Sub
+        Sub.cid = cid++
+
+        Sub.options = mergeOptions(Super.options, extendOptions)
+        Sub['super'] = Super
+
+        if (Sub.options.props) {
+          initProps(Sub)
+        }
+
+        if (Sub.options.computed) {
+          initComputed(Sub)
+        }
+
+        Sub.extend = Super.extend
+        Sub.mixin = Super.mixin
+        Sub.use = Super.use
+
+        const ASSET_TYPES = ['component', 'directive', 'filter']
+        ASSET_TYPES.forEach(function (type) {
+          Sub[type] = Super[type]
+        })
+
+        if (name) {
+          Sub.options.components[name] = Sub
+        }
+
+        Sub.superOptions = Super.options
+        Sub.extendOptions = extendOptions
+        Sub.sealedOptions = extend({}, Sub.options)
+
+        // 缓存构造函数
+        cachedCtore[SuperId] = Sub
+        return Sub
+      }
+
+      function initProps(Comp) {
+        const props = Comp.options.props
+        for (const key in props) {
+          proxy(Comp.prototype, '_props', key)
+        }
+      }
+
+      function proxy(target, sourceKey, key) {
+        sharedPropertyDefinition.get = function proxyGetter() {
+          return this[sourceKey][key]
+        }
+        sharedPropertyDefinition.set = function proxySetter(val) {
+          this[sourceKey][key] = val
+        }
+        Object.defineProperty(target, key, sharedPropertyDefinition)
+      }
+
+      function initComputed(Comp) {
+        const computed = Comp.options.computed
+        for (const key in computed) {
+          defineComputed(Comp.prototype, key, computed[key])
+        }
+      }
+    </script>
+    <script name="nextTick">
+      // 与vm.$nextTick原理一样
+      Vue.nextTick = nextTick
+    </script>
+    <script name="set">
+      // 与vm.$set原理一样
+      Vue.set = set
+    </script>
+    <script name="delete">
+      // 与vm.$delete原理一样
+      Vue.delete = del
+    </script>
+    <script name="directive">
+      // 注册全局指令
+      Vue.directive(id, fn)
+
+      Vue.directive('my-directive', {
+        bind: function () {},
+        inserted: function () {},
+        update: function () {},
+        componentUpdated: function () {},
+        unbind: function () {}
+      })
+
+      Vue.directive('my-directive', function () {
+        // 这里将会被bind和update调用
+      })
+
+      // 返回已注册的指令
+      var myDirective = Vue.directive('my-directive')
+
+      // 保存指令的位置
+      Vue.options = Object.create(null)
+      Vue.options['directive']
+    </script>
+  </body>
+</html>

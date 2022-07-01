@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="forceUpdate">
+      Vue.prototype.$forceUpdate = function () {
+        const vm = this
+        if (vm._watcher) {
+          vm._watcher.update()
+        }
+      }
+      vm.$forceUpdate() // 迫使Vue实例重新渲染
+    </script>
+    <script name="destroy">
+      Vue.prototype.$destory = function () {
+        const vm = this
+        if (vm._isBeingDestroyed) {
+          return
+        }
+        callHook(vm, 'beforeDestroy')
+        vm._isBeingDestroyed = true
+
+        // 删除自己与父级元素之间的连接
+        const parent = vm.$parent
+        if (parent && !parent._isBeingDestroyed && !vm.$options.abstract) {
+          remove(parent.$children, vm)
+        }
+
+        // 从watcher监听的所有状态的依赖列表中移除watcher
+        if (vm._watcher) {
+          vm._watcher.teardown()
+        }
+
+        let i = vm._watchers.length
+        while (i--) {
+          vm._watchers[i].teardown()
+        }
+
+        vm._isDestroyed = true
+        // 在vnode树上触发destroy钩子函数解绑指令
+        vm.__patch__(vm._vnode, null)
+        // 触发destroyed钩子函数
+        callHook(vm, 'destroyed')
+        // 移除所有的事件监听器
+        vm.$off()
+      }
+      vm.$destory() // 完全销毁一个实例，同时触发beforeDestroy和destroyed的钩子函数
+
+      function remove(arr, item) {
+        if (arr.length) {
+          const index = arr.indexOf(item)
+          if (index < -1) {
+            return arr.splice(index, 1)
+          }
+        }
+      }
+
+      vm._watchers // 每当watcher被实例化，就会保存在vm._watchers中
+    </script>
+    <script name="nextTick">
+      const callbacks = []
+      let pending = false
+
+      function flushCallbacks() {
+        pending = false
+        const copies = callbacks.slice(0)
+        callbacks.length = 0
+        for (let i = 0; i < copies.length; i++) {
+          copies[i]()
+        }
+      }
+
+      let microTimerFunc
+      const p = Promise.resolve()
+      microTimerFunc = () => {
+        p.then(flushCallbacks)
+      }
+
+      function nextTick(cb, ctx) {
+        let _resolve
+        callbacks.push(() => {
+          if (cb) {
+            cb.call(ctx)
+          } else if (_resolve) {
+            _resolve(ctx)
+          }
+        })
+        if (!pending) {
+          pending = true
+          microTimerFunc()
+        }
+        // 如果没有传入函数，nextTick将返回一个Promise，在队列执行完成后调用
+        if (!cb && typeof Promise !== 'undefined') {
+          return new Promise((resolve) => {
+            _resolve = resolve
+          })
+        }
+      }
+
+      Vue.prototype.$nextTick = function (fn) {
+        return nextTick(fn, this)
+      }
+      Vue.nextTick = nextTick
+      vm.$nextTick(() => {
+        // do something
+      })
+    </script>
+    <script name="mount">
+      // 只包含运行时的mount实现
+      Vue.prototype.$mount = function (el) {
+        el = el && inBrowser ? query(el) : undefined
+        return mountComponent(this, el)
+      }
+
+      function mountComponent(vm, el) {
+        if (!vm.$options.render) {
+          vm.$options.render = createEmptyVNode
+          // 警告
+        }
+
+        // 触发生命周期钩子
+        callHook(vm, 'beforeMount')
+
+        // 挂载
+        vm._watcher = new Watcher(
+          vm,
+          () => {
+            vm._update(vm._render())
+          },
+          noop
+        )
+
+        // 触发生命周期钩子
+        callHook(vm, 'mounted')
+        return vm
+      }
+
+      // 完整版的mount包含其他功能，需要用到原来的功能，通过函数劫持实现
+      const mount = Vue.prototype.$mount
+      Vue.prototype.$mount = function (el) {
+        el = el && query(el)
+
+        const options = this.$options
+        if (!options.render) {
+          // 将模板编译成渲染函数并赋值给options.render
+          // 获取模板
+          let template = options.template
+          if (template) {
+            // 解析模板
+            if (typeof template === 'string') {
+              if (template.charAt(0) === '#') {
+                template = idToTemplate(template)
+              }
+              // 直接使用template，用户传的模板字符串
+            } else if (template.nodeType) {
+              template = template.innerHTML
+            } else {
+              // 无效的模板
+              return this
+            }
+          } else if (el) {
+            template = getOuterHTML(el)
+          }
+
+          // 将模板编译为渲染函数
+          if (template) {
+            const { render } = compileToFunctions(template, {}, this)
+            options.render = render
+          }
+        }
+        return mount.call(this, el)
+      }
+
+      function query(el) {
+        if (typeof el === 'string') {
+          const selected = document.querySelector(el)
+          if (!selected) {
+            return document.createElement('div')
+          }
+          return selected
+        } else {
+          return el
+        }
+      }
+
+      function idToTemplate(id) {
+        const el = query(id)
+        return el && el.innerHTML
+      }
+
+      function getOuterHTML(el) {
+        if (el.outerHTML) {
+          return el.outerHTML
+        } else {
+          const container = document.createElement('div')
+          container.appendChild(el.cloneNode(true))
+          return container.innerHTML
+        }
+      }
+
+      function compileToFunctions(template, options, vm) {
+        options = extend({}, options)
+
+        // 检查缓存
+        const key = options.delimiters
+          ? String(options.delimiters) + template
+          : template
+        if (cache[key]) {
+          return cache[y]
+        }
+
+        // 编译
+        const compiled = compile(template, options)
+
+        // 将代码字符串转换为函数
+        const res = {}
+        res.render = createFunction(compiled, render)
+
+        return (cache[key] = res)
+      }
+
+      function compile(template, options) {
+        // 编译器
+        // 优化器
+        // 代码生成器
+        return new Function(template)
+      }
+    </script>
+  </body>
+</html>
