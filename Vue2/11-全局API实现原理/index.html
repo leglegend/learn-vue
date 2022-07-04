@@ -98,6 +98,7 @@
       Vue.delete = del
     </script>
     <script name="directive">
+      // 这里只有注册 没有实现
       // 注册全局指令
       Vue.directive(id, fn)
 
@@ -118,7 +119,93 @@
 
       // 保存指令的位置
       Vue.options = Object.create(null)
-      Vue.options['directive']
+      Vue.options['directive'] = Object.create(null)
+      Vue.directive = function (id, definition) {
+        if (!definition) {
+          // 读取操作 返回对应的指令
+          return this.options['directives'][id]
+        } else {
+          // 注册新指令
+          if (typeof definition === 'function') {
+            definition = { bind: definition, update: definition }
+          }
+          this.options['directives'][id] = definition
+          return definition
+        }
+      }
+    </script>
+    <script name="filter">
+      // 注册filter
+      // Vue.filter(id,Function|Object)
+      Vue.filter('my-filter', function (value) {
+        // 返回处理后的值
+      })
+      Vue.options['filters'] = Object.create(null)
+      Vue.filter = function (id, definition) {
+        if (!definition) {
+          return this.options['filters'][id]
+        } else {
+          this.options['filters'][id] = definition
+          return definition
+        }
+      }
+    </script>
+    <script name="component">
+      Vue.options['components'] = Object.create(null)
+      Vue.filter = function (id, definition) {
+        if (!definition) {
+          return this.options['components'][id]
+        } else {
+          if (isPlainObject(definition)) {
+            definition.name = definition.name || id
+            definition = Vue.extend(definition)
+          }
+          this.options['components'][id] = definition
+          return definition
+        }
+      }
+    </script>
+    <script name="use">
+      // Vue.use(Object | Function)
+      Vue.use = function (plugin) {
+        const installedPlugins =
+          this._installedPlugins || (this._installedPlugins = [])
+        if (installedPlugins.indexOf(plugin) > -1) {
+          return this
+        }
+
+        // 其他参数
+        const args = toArray(arguments, 1)
+        args.unshift(this)
+        if (typeof plugin.install === 'function') {
+          plugin.install.apply(plugin, args)
+        } else if (typeof plugin === 'function') {
+          plugin.apply(null, args)
+        }
+        installedPlugins.push(plugin)
+        return this
+      }
+    </script>
+    <script name="mixin">
+      Vue.mixin = function (mixin) {
+        this.options = mergeOptions(this.options, mixin)
+        return this
+      }
+    </script>
+    <script name="compile">
+      // 只有完整版Vue才有效
+      var res = Vue.compile('<div>{{name}}</div>')
+      new Vue({
+        data: {
+          name: 'tui'
+        },
+        render: res.render
+      })
+      Vue.compile = compileToFunctions
+    </script>
+    <script name="version">
+      Vue.version = '__VERSION__'
+      // 构建时将__VERSION__替换成package.json中的版本号
     </script>
   </body>
 </html>

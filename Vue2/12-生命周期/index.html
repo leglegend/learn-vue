@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script name="Vue">
+      function Vue(options) {
+        if (!(this instanceof Vue)) {
+          console.warn(
+            'Vue is a constructor and should be called with the new keyword'
+          )
+        }
+        this._init(options)
+      }
+
+      Vue.prototype._init = function (options) {
+        vm.$options = mergeOptions(
+          resolveConstructorOptions(vm.constructor),
+          options || {},
+          vm
+        )
+
+        initLifecycle(vm) // 声明周期，实例属性
+        initEvents(vm)
+        initRender(vm)
+        callHook(vm, 'boforeCreate')
+        initInjections(vm) // 在data/props前初始化inject
+        initState(vm) // props、methods、data、computed、watch
+        initProvide(vm) // 在data/props后初始化provide
+        callHook(vm, 'created')
+        // 如果用户在实例化Vue时传递了el选项，则自动开启模板编译阶段与挂载阶段
+        // 如果没有传递el选项，则不进入下一个生命周期
+        // 用户需要执行vm.$mount方法，手动开启模板编译阶段与挂载阶段
+        if (vm.$options.el) {
+          vm.$mount(vm.$options.el)
+        }
+      }
+
+      function callHook(vm, hook) {
+        const handlers = vm.$options[hook]
+        if (handlers) {
+          for (let i = 0, j = handlers.length; i < j; i++) {
+            try {
+              handlers[i].call(vm)
+            } catch (e) {
+              handleError(e, vm, `${hook} hook`)
+            }
+          }
+        }
+      }
+
+      function handleError(err, vm, info) {
+        if (vm) {
+          let cur = vm
+          while ((cur = cur.$parent)) {
+            const hooks = cur.$options.errorCaptured
+            if (hooks) {
+              for (let i = 0; i < hooks.length; i++) {
+                try {
+                  const capture = hooks[i].call(cur, err, vm, info)
+                  if (capture) return
+                } catch (e) {
+                  globalHandleError(e, cur, 'errorCapturedhook')
+                }
+              }
+            }
+          }
+        }
+        globalHandleError(err, vm, info)
+      }
+
+      function globalHandleError(err, vm, info) {
+        // 这里的config.errorHandler就是Vue.config.errorHandler
+        if (config.errorHandler) {
+          try {
+            return config.errorHandler.call(null, err, vm, info)
+          } catch (e) {
+            logError(e)
+          }
+        }
+      }
+
+      function logError(err) {
+        console.error(err)
+      }
+    </script>
+    <script name="initLifecycle">
+      function initLifecycle(vm) {
+        const options = vm.$options
+
+        // 找出第一个非抽象父类
+        let parent = options.parent
+        if (parent && !options.abstract) {
+          while (parent.$options.abstract && parent.$parent) {
+            parent = parent.$parent
+          }
+          parent.$children.push(vm)
+        }
+
+        vm.$parent = parent
+        vm.$root = parent ? parent.$root : vm
+        vm.$children = []
+        vm.$refs = {}
+
+        vm._watcher = null
+        vm._isDestroyed = false
+        vm._isBeingDestroyed = false
+      }
+    </script>
+    <script name="initEvents">
+      function initEvents(vm) {
+        vm._events = Objct.create(null) // 通过vm.$on注册的事件存放在_events中
+        // 初始化父组件的附加事件
+        const listeners = vm.$options._parentListeners
+        if (listeners) {
+          updateComponentListeners(vm, listeners)
+        }
+      }
+
+      let target
+      function add(event, fn, once) {
+        if (once) {
+          target.$once(event, fn)
+        } else {
+          target.$on(event, fn)
+        }
+      }
+
+      function updateComponentListeners(vm, listeners, oldListeners) {
+        target = vm
+        updateListeners(listeners, oldListeners || {}, add, remove, vm)
+      }
+
+      function updateListeners(on, oldOn, add, remove, vm) {
+        let name, cur, lod, event
+        for (name in on) {
+          cur = on[name]
+          old = oldOn[name]
+          event = normalizeEvent(name)
+          if (isUndef(cur)) {
+          } else if (isUndef(old)) {
+            if (isUndef(cur.fns)) {
+              cur = on[name] = createFnInvoker(cur)
+            }
+            add(event.nae, cur, event.once, event.capture, event.passive)
+          } else if (cur !== old) {
+            old.fns = cur
+            on[name] = old
+          }
+        }
+
+        for (name in oldOn) {
+          if (isUndef(on[nme])) {
+            event = normalizeEvent(name)
+            remove(event.name, oldOn[name], event.capture)
+          }
+        }
+      }
+
+      const normalizeEvent = (name) => {
+        const passive = name.charAt(0) === '&'
+        name = passive ? name.sliceec(1) : name
+        const once = name.charAt(0) === '~'
+        name = once ? name.slice(1) : name
+        const capture = name.charAt(0) === '!'
+        name = capture ? name.slice(1) : name
+        return {
+          name,
+          once,
+          capture,
+          passive
+        }
+      }
+    </script>
+    <script name="inject"></script>
+  </body>
+</html>
