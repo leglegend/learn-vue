@@ -177,5 +177,66 @@
       }
     </script>
     <script name="inject"></script>
+
+    <script name="computed">
+      const computedWatcherOptions = { lazy: true }
+      function initComputed(vm, computed) {
+        const wathers = (vm._computedWatchers = Objct.create(null))
+        //计算属性在SSR环境中，只是一个普通的getter
+        const isSSR = isServerRendering()
+        for (const key in computed) {
+          const userDef = computed[key]
+          const getter = typeof userDef === 'function' ? userDef : userDef.get
+
+          // 在非SSR环境中，为计算属性创建的内部观察器
+          if (!isSSR) {
+            wathcers[key] = new Watcher(
+              vm,
+              getter || noop,
+              noop,
+              computedWatcherOptions
+            )
+          }
+
+          if (!(key in vm)) {
+            defineComputed(vm, key, userDef)
+          }
+        }
+      }
+
+      const sharedPropertyDefinition = {
+        enmuerable: true,
+        configurable: true,
+        get: noop,
+        set: noop
+      }
+
+      function defineComputed(target, key, userDef) {
+        const shouldCache = !isServerRendering()
+        if (typeof userDef === 'function') {
+          sharedPropertyDefinition.get = shouldCache
+            ? createComputedGetter(key)
+            : userDef
+        } else {
+          sharedPropertyDefinition.get = userDef.get
+            ? shouldCache
+              ? createComputedGetter(key)
+              : userDef.get
+            : noop
+          sharedPropertyDefinition.set = userDef.set ? userDef.set : noop
+        }
+        Object.defineProperty(target, key, sharedPropertyDefinition)
+      }
+
+      function createComputedGetter(key) {
+        return function computedGetter() {
+          const watcher = this._computedWatchers && this._computedWatchers[key]
+          if (watcher) {
+            watcher.depend()
+            return watcher.evaluate()
+          }
+        }
+      }
+    </script>
   </body>
 </html>
