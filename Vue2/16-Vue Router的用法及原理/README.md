@@ -85,3 +85,59 @@ router.afterEach((to,from)=>{
     }
 }
 ```
+
+
+## 原理分析
+### hash的本质
+```html
+<a href="/#/home">Home</a>
+<a href="/#/about">About</a>
+<div id="view"></div>
+<script>
+  let view = document.querySelector('#view')
+
+  function cb() {
+    let hash = location.hash || '/#/home'
+    view.innerText = hash
+  }
+  window.addEventListener('hashchange', cb)
+  window.addEventListener('load', cb)
+</script>
+```
+在浏览器中，`#`后面的内容变化不会重新刷新界面，并且可以通过`hashchange`事件监听到`#`后面内容的变化，因此可以通过监听hash的变化，将不同的内容渲染到view中，这就是`ronter-link`和`router-view`的本质。  
+### history的简单实现
+```html
+<a href="/home">Home</a>
+<a href="/about">About</a>
+<div id="view"></div>
+<script>
+  let view = document.querySelector('#view')
+
+  function push(path = '/home') {
+    window.history.pushState(null, '', path)
+  }
+
+  function update() {
+    view.innerHTML = location.pathname
+  }
+
+  window.addEventListener('popstate', () => {
+    console.log('popstate')
+    update()
+  })
+
+  window.addEventListener('load', (e) => {
+    let links = document.querySelectorAll('a[href]')
+    links.forEach((el) =>
+      el.addEventListener('click', (e) => {
+        // 阻止a标签的默认行为
+        e.preventDefault()
+        push(el.getAttribute('href'))
+      })
+    )
+  })
+</script>
+```
+利用`window.history.pushState`不会实际跳转，只会更改url的特性，通过点击事件监听到url的变化，阻止事件并进行view的显示操作。
+### Vue.use(VueRouter)
+
