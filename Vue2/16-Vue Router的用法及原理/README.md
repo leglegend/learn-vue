@@ -140,4 +140,10 @@ router.afterEach((to,from)=>{
 ```
 利用`window.history.pushState`不会实际跳转，只会更改url的特性，通过点击事件监听到url的变化，阻止事件并进行view的显示操作。
 ### Vue.use(VueRouter)
-
+VueRouter向外暴露了install方法，供Vue.use使用。install方法主要做了以下几件事：
+1. 通过混入在实例中注册VueRouter节点
+在install函数中，通过Vue.mixin传入beforeCreate生命周期，并在beforeCreate中将初始化Vue时传入的router实例赋值给Vue实例的_router属性，非根实例可通过_rootRouter获取到根实例，进而获取到_router属性。
+2. 在Vue的原型对象上添加代理属性`$router`和`$route`
+getter中直接返回this._rootRouter中的_router和_route属性。
+3. 注册RouterView和RouterLink组件
+### new VueRouter
