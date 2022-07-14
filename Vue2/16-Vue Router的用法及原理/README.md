@@ -147,3 +147,5 @@ VueRouter向外暴露了install方法，供Vue.use使用。install方法主要�
 getter中直接返回this._rootRouter中的_router和_route属性。
 3. 注册RouterView和RouterLink组件
 ### new VueRouter
+
+1
