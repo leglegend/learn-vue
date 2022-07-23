@@ -67,7 +67,8 @@
       let depsMap = bucket.get(target)
       // 如果不存在depsMap，就新建一个Map与target关联
       if (!depsMap) {
-        bucket.set(target, (depsMap = new Map()))
+        depsMap = new Map()
+        bucket.set(target, depsMap)
       }
       // 根据key从depsMap中取得deps，他是一个set，存着与key关联的effects
       let deps = depsMap.get(key)
