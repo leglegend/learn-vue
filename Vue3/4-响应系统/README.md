@@ -201,3 +201,35 @@ const proxy = new Proxy(data, {
   }
 })
 ```
+setter也需要修改，当数据被修改时，我们在setter中实现了对其所有副作用给函数的调用，也就是说直接把该属性维护的`桶`中的副作用函数挨个调用一遍就行了：
+```js
+const proxy = new Proxy(data, {
+  set(target, key, newVal) {
+    target[key] = newVal
+
+    const depsMap = targetMap.get(target)
+
+    if (!depsMap) return
+
+    const effects = depsMap.get(key)
+    // 执行所有副作用函数
+    effects.forEach((effectFn) => effectFn())
+  }
+})
+```
+上述代码，当setter被触发时，会通过target和key取到该属性维护的`桶`，然后挨个执行`桶`里存放的副作用函数，但是这里有个问题，副作用函数执行时，会先清空依赖，然后触发副作用函数里面的属性，又将自己放进了`桶`里，这样就形成了死循环，一直放一直执行。我们可以用一个新的Set来修复这个问题：
+```js 
+const proxy = new Proxy(data, {
+  set(target, key, newVal) {
+    target[key] = newVal
+    const depsMap = targetMap.get(target)
+    if (!depsMap) return
+    const effects = depsMap.get(key)
+
+    // 通过effects创建一个新集合，避免无限循环
+    const effectsToRun = new Set(effects)
+    // 执行所有副作用函数
+    effectsToRun.forEach((effectFn) => effectFn())
+  }
+})
+```
