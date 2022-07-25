@@ -233,3 +233,216 @@ const proxy = new Proxy(data, {
   }
 })
 ```
+## 完善响应式
+上面我们已经实现了基于proxy的响应式，但是在特定情况下还是会出问题，我们还需要一些操作来晚上它。
+### 嵌套副作用函数
+先来看下面的例子：
+```js
+export default {
+  data: {
+    firstName: '三',
+    lastName: '张',
+    age: 18
+  },
+  computed: {
+    fullName() {
+      return this.lastName + this.firstName
+    },
+    persionInfo() {
+      return this.fullName + ' ' + this.age
+    }
+  }
+}
+```
+虽然我们还没学到computed，但是我们仍可以用一个简单的副作用函数表示computed：
+```js
+let fullName = effect(()=>{
+  return proxy.lastName + proxy.firstName
+})
+let persionInfo = effect(()=>{
+  return fullName + proxy.age
+})
+```
+其中`persionInfo`实际是发生了副作用函数嵌套：
+```js
+let persionInfo = effect(()=>{
+  let fullName = effect(()=>{
+    return proxy.lastName + proxy.firstName
+  })
+  return fullName + proxy.age
+})
+```
+上面的例子不一定对，但是现阶段能表明某些问题。我们把两个副作用函数称为fullName副作用函数和persionInfo副作用函数。在persionInfo副作用函数执行时，其实需要在执行过程中执行fullName副作用函数，这就会出现一个问题，我们全局注册的`activeEffect`在fullName执行时会将persionInfo替换掉，这就导致persionInfo副作用函数无法正确的放进`age`的`桶`中。  
+在Vue2中，对Watcher维护了一个订阅者栈，`Dep.target`作为一个全局变量存放当前Watcher，`targetStack`保存着当前正在执行的所有Watcher。当访问开始时，Watcher会入栈并设置为当前的订阅者，依赖收集完成后出栈并把Dep.target设置为上一个Watcher，没有则设置为null。这样当发生嵌套时，每个属性都能正确的完成依赖收集。  
+这种逻辑放在Vue3同样合适：
+```js
+// 存储被注册的副作用函数
+let activeEffect
+// effect 栈
+const effectStack = []
+
+function effect(fn) {
+  const effectFn = ()=> {
+    // 将activeEffect设置为当前副作用函数
+    activeEffect = effectFn
+    // 进栈
+    effectStack.push(effectFn)
+    // 执行原副作用函数
+    fn()
+    // 出栈
+    effectStack.pop()
+    // 把activeEffect还原为之前的值
+    activeEffect = effectStack[effectStack.length - 1]
+  }
+  effectFn()
+}
+```
+### 避免无限循环
+先来看下面的例子：
+```js
+effect(()=>{
+  proxy.age++
+})
+```
+我们在副作用函数中对age进行了自增一，这端代码翻译过来就是`proxy.age = proxy.age + 1`。这段代码即对age进行了访问，又对age进行了修改，这就导致访问时将副作用函数添加进了age的`桶`里，修改时又从`桶`里拿出了副作用函数执行，执行时又访问了age....就形成了一个死循环，但其实我们想要的只是让age自增一而已。  
+导致这个问题的原因是setter触发执行的副作用函数，就是当前激活的副作用函数，我们只需要在setter触发时判断取出的副作用函数是否是当前激活的副作用函数(是的话就代表当前副作用函数即执行了访问，又执行了修改)，然后跳过当前激活的副作用函数就可以了：
+```js 
+const proxy = new Proxy(data, {
+  set(target, key, newVal) {
+    target[key] = newVal
+    const depsMap = targetMap.get(target)
+    if (!depsMap) return
+    const effects = depsMap.get(key)
+
+    // 通过effects创建一个新集合，避免无限循环
+    const effectsToRun = new Set()
+    // 排除当前激活的副作用函数
+    effects.forEach(effectFn=>{
+      if(effectFn!=activeEffect) effectsToRun.add(effectFn)
+    })
+    // 执行所有副作用函数
+    effectsToRun.forEach((effectFn) => effectFn())
+  }
+})
+```
+## 调度执行
+现在我们已经有了一个完善的响应式了，但是这个响应式，效率不是那么的高。因为我们每次更改对象，都会直接触发副作用函数，假设我们在一个method中修改了数个对象，那么就需要调用n次副作用函数，了解Vue的同学都会知道，修改对象并不是实时的，而是会放进微任务队列，在当前事件循环结束时统一执行。现在我们就来构建这个队列，在Vue中，它叫调度器。  
+在Vue2中，属性被修改时，属性上的订阅器会通知它所收集的订阅者————Watcher，实际上是调用了Watcher上的`update`方法，该方法会将自己推进一个队列中，该队列会通过`nextTick`方法放进该次事件循环的末尾，当该次事件循环结束时，取出队列中的Watcher，一次调用Watcher的`run`方法。`nextTick`实际上就是通过微任务实现的，Vue3中我们依然可以顺着这个思路实现： 
+```js
+// 定义一个任务队列
+const jobQueue = new Set()
+
+effect(()=>{
+  console.log(proxy.name)
+},{
+  scheduler(fn) {
+    // 每次调度时，将副作用函数添加到 jobQueue 队列中
+    jobQueue.add(fn)
+    // 调用 flushJob 刷新队列
+    flushJob()
+  }
+})
+```
+我们可以在注册副作用函数时传入一个调度器，调度器会把副作用函数加到队列中。
+```js
+// 使用 Promise.resolve()创建一个Promise实例，我们用它将一个任务添加到微任务队列
+const p = Promise.resolve()
+// 一个标志代表是否正在刷新队列
+let isFlushing = false
+function flushJob() {
+  // 如果正在刷新队列，则什么都不做
+  if (isFlushing) return
+  // 设置为true 代表正在刷新
+  isFlushing = true
+  // 在微任务队列中刷新jobQueue队列
+  p.then(() => {
+    jobQueue.forEach((job) => job())
+  }).finally(() => {
+    // 结束后重置isFlushing
+    isFlushing = false
+  })
+}
+```
+声明一个已解决的promise，当第一个副作用函数调度时会触发`flushJob`方法，进而为promise添加then，也就是说，当当前事件循环结束时，then中的函数会执行，所以在当前事件循环结束前，我们可以一直往队列中添加副作用函数，当结束时，这些副作用函数会统一执行。  
+```js
+function effect(fn, options = {}) {
+  const effectFn = () => {
+    ...
+  }
+  ...
+  // 将options挂载到effectFn上
+  effectFn.options = options
+  ...
+}
+
+const proxy = new Proxy(data, {
+  set(target, key, newVal) {
+    target[key] = newVal
+    const depsMap = targetMap.get(target)
+    if (!depsMap) return
+    const effects = depsMap.get(key)
+
+    // 通过effects创建一个新集合，避免无限循环
+    const effectsToRun = new Set()
+    // 排除当前激活的副作用函数
+    effects.forEach(effectFn=>{
+      if(effectFn!=activeEffect) effectsToRun.add(effectFn)
+    })
+    // 执行所有副作用函数
+    effectsToRun.forEach((effectFn) => {
+      if(effectFn.option&&effectFn.option.scheduler) {
+        // 如果一个副作用函数存在调度器，则调用该调度器，并将该副作用函数作为参数传递
+        effectFn.option.scheduler(effectFn)
+      } else {
+        effectFn()
+      }
+    })
+  }
+})
+```
+上面的代码修改了effect函数，在注册副作用函数时，将scheduler附加在副作用函数上。当触发setter时，如果副作用函数存在scheduler，则通过scheduler触发副作用函数，这样scheduler就会将副作用函数放进队列中了。  
+## 计算属性
+计算属性是我们在Vue中使用非常频繁的功能，我们可以定义一个计算属性(其实是个函数)，他能监听到内部引用的属性的变化，然后重新计算返回值。听起来是不是有点耳熟？好像我们的副作用函数返回一个值就能够差不多实现这个效果。  
+在Vue2中，计算属性是通过Watcher来实现的。在实例化Watcher时，我们需要传入一个订阅的内容，它可以是字符串(其实是一个对象的key)，或是一个函数，computed就是通过传入一个函数实现的。该函数会被Watcher调用，以访问函数内部的属性，进而把Watcher添加到属性的订阅器中。函数的返回值会保存在Watcher的value中，当属性发生变化时，会重新计算value的值。  
+```js
+function computed(getter) {
+  // value 用来缓存上一次计算的值
+  let value
+  // dirty标志，用来标识是否需要重新计算值，为true意味着'脏'，需要重新计算
+  let dirty = true
+  // 把getter作为副作用函数，创建一个lazy的effect
+  const effectFn = effect(getter, {
+    lazy: true,
+    // 添加调度器，在调度器中将dirty重制为true
+    scheduler() {
+      if (!dirty) {
+        dirty = true
+        // 当计算属性依赖的响应式数据变化时，手动调用 trigger 函数触发响应
+        trigger(obj, 'value')
+      }
+    }
+  })
+
+  const obj = {
+    get value() {
+      // 只有'脏'时才计算值，并将其缓存到value中
+      if (dirty) {
+        value = effectFn()
+        // 将dirty设置为false，下次访问直接使用缓存到value的值
+        dirty = false
+      }
+      // 当读取value时，手动调用track函数进行追踪
+      track(obj, 'value')
+      return value
+    }
+  }
+
+  return obj
+}
+const sumRes = computed(() => obj.foo + obj.bar)
+```
+上面的代码声明了一个computed函数，传入一个getter函数，通过effect注册这个getter，副作用函数执行的结果缓存到value中并返回。
+
+
+
+
