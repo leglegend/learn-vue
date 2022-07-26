@@ -139,12 +139,20 @@
 
       let oldValue, newValue
 
+      let cleanup
+
+      function onCleanUp(fn) {
+        cleanup = fn
+      }
+
       // 提取scheduler调度函数为一个独立的job函数
       const job = () => {
         // 在scheduler重新调用副作用函数，得到新值
         newValue = effectFn()
+        // 在调用cb函数前，先调用过期回调
+        if (cleanup) cleanup()
         // 当数据变化时，调用回调函数cb
-        cb(newValue, oldValue)
+        cb(newValue, oldValue, onCleanup)
         // 更新旧值
         oldValue = newValue
       }
@@ -187,9 +195,15 @@
 
     watch(
       () => obj.foo,
-      (newVal, oldVal) => {
+      (newVal, oldVal, onCleanup) => {
         console.log('数据变了')
         console.log(newVal, oldVal)
+        let expired = false
+        onCleanup(() => {
+          expired = true
+        })
+        // res为异步请求的返回值
+        if (!expired) finalData = res
       },
       {
         immediate: true,

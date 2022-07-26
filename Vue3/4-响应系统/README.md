@@ -442,7 +442,113 @@ function computed(getter) {
 const sumRes = computed(() => obj.foo + obj.bar)
 ```
 上面的代码声明了一个computed函数，传入一个getter函数，通过effect注册这个getter，副作用函数执行的结果缓存到value中并返回。
+## watch
+因为watch在option和在实例中(`$watch`)的实现方法完全一致，并且`$watch`的功能更全一些，所以下面使用都以`$watch`为基准。  
+在Vue2中，watch和computed都是通过Watcher实现的。我们先来回顾下Watcher的用法，当实例化Watcher时，需要传入几个参数：组件实例、getter(一个字符串或函数)、callback、options。当getter为一个字符串时，Watcher会找到该字符串对应的属性，当该属性发生变化时，调用callback。当getter为一个函数时，Watcher会调用该函数，当该函数内部的属性发生变化时，调用callback。  
+上节我们已经讨论了computed，这节我们主要看一下watch的实现(Vue2)：
+```js
+Vue.prototype.$watch = function (expOrFn, cb, options) {
+  const vm = this
+  options = options || {}
+  const watcher = new Watcher(vm, expOrFn, cb, options)
+  /*有immediate参数的时候会立即执行*/
+  if (options.immediate) {
+    cb.call(vm, watcher.value)
+  }
+  /*返回一个取消观察函数，用来停止触发回调*/
+  return function unwatchFn () {
+    watcher.teardown()
+  }
+}
+```
+实现逻辑非常简单，基本就是把我们传给watch的参数原封不动的传给Watcher，如果immediate为true就立即调用一下callback，最后返回一个unwatchFn函数，其实就是调用了watcher的teardown方法。  
+其实Vue3中的effect的功能和Watcher类似，但是没有Watcher那么强大，可以理解为effect实现了watcher的部分功能，比如说我们watch的getter函数就需要依赖effect实现，但effect可不会帮我们调用callback函数，这部分功能需要我们自己实现，我们现在还没有办法通过字符串监听属性变化，所以先只考虑函数的情况：
+```js
+watch(()=>proxy.name,(newVal,oldVal)=>{
+  console.log(`name发生了变化${oldVal}->${newVal}`)
+})
+```
+上面我们通过watch方法定义了对name属性的监听，我们先来实现watch方法：
+```js
+function watch(source,cb,option={}) {
+  let getter
+  if(typeof source === 'function') {
+    getter = source
+  } else {
+    // 这里要做的就是递归调用source
+    getter = () => traverse(source)
+  }
 
+  // 这里保存新值和旧值，用来传入cb函数中
+  let oldValue, newValue
+
+  const job = ()=> {
+    newValue = effectFn()
+    cb(newValue,oldValue)
+    oldValue = newValue
+  }
+
+  // 接收effect的返回值，其实就是包装后的getter，调用时可以返回getter的返回值
+  const effectFn = effect(()=>getter(), {
+    // 设置为lazy，effct就不会自动调用
+    lazy: true,
+    // 我们定义一个调度器，当触发时就会运行调度器
+    scheduler() {
+      // 在调度函数中判断flush是否为post，如果是，将其放进微任务队列中执行
+      if (options.flush === 'post') {
+        const p = Promise.resolve()
+        p.then(job)
+      } else {
+        // pre暂时无法模拟，这里是sync，
+        job()
+      }
+    }
+  })
+  // 立即执行
+  if(options.immediate) {
+    job()
+  } else {
+    // 立即调用一下effctFn，就能计算出getter的返回值
+    oldValue = effectFn()
+  }
+}
+```
+watch本质上还是依赖了effect和调度器，将getter作为副作用函数传入effect中，手动调用副作用函数，会把副作用函数放进getter内属性的`桶`里。当getter中的属性发生变化时，会执行副作用函数，由于我们传入了调度器，所以实际上时执行了调度器，这时再我们手动调用副作用函数(实际调用了getter，并获得了返回值)，并将最新值传入`cb`函数，就实现了watch的主要功能。  
+Vue3新加入了fulsh配置，可以让我们自己决定`cb`函数调用的时机。比如说如果flush为post，那么cb就会放进微任务队列中执行(也就是和下次DOM渲染一起执行)。  
+### watch的竞态问题
+watch和computed的一个区别就是，computed是同步的，需要同步返回一个值，而watch可以是异步的，在监听到一个值改变时，可以调用接口等异步操作。这就导致一个问题，当值发生变化时，我们发起了一个请求，在请求返回之前，值又发生了变化，所以又发起了一个请求，我们不确定哪个请求先到达，但是我们期望的结果其实是第二个请求的，这就导致了结果的不确定性。  
+Vue2没有给出这个问题的解决方案，需要用户自行解决竞态问题，Vue3通过一个onCleanup解决了这个问题：
+```js
+function watch(source,cb,option={}) {
+  let cleanup
+  function onCleanup(fn) {
+    cleanup = fn
+  } 
+  ...
+  const job = ()=> {
+    // 在调用cb函数前，先调用过期回调
+    if (cleanup) cleanup()
+    newValue = effectFn()
+    // 将onCleanup作为参数传入cb
+    cb(newValue,oldValue,onCleanup)
+    oldValue = newValue
+  }
+  ...
+}
+
+watch(()=>proxy.name,async (newVal,oldVal,onCleanup)=>{
+  // 是否过期
+  let expired = false
+  onCleanup(()=> {
+    expired = true
+  })
+
+  res = await post()
+  // 过期了则不进行后续操作
+  if(!expired) finalResult = res
+})
+```
+当第二次发生变化时，会执行第一次传入onCleanUp的函数，也就是将expired设置为false，这样当第一次的请求完成时，也不会执行后续操作，将按照第二次请求的结果为准。  
 
 
 
