@@ -1,4 +1,9 @@
 export const ITERATE_KEY = Symbol('iterate')
+export const TriggerType = {
+  SET: 'SET',
+  ADD: 'ADD',
+  DELETE: 'DELETE'
+}
 
 // 存储被注册的副作用函数
 let activeEffect
@@ -68,7 +73,7 @@ export function track(target, key) {
   activeEffect.deps.push(deps)
 }
 
-export function trigger(target, key) {
+export function trigger(target, key, type) {
   // 根据target从桶中取得depsMap
   const depsMap = bucket.get(target)
 
@@ -90,13 +95,16 @@ export function trigger(target, key) {
       }
     })
 
-  // 将于ITERATE_KEY相关联得到副作用函数也添加到effectsToRun
-  iterateEffects &&
-    iterateEffects.forEach((effectFn) => {
-      if (effectFn !== activeEffect) {
-        effectsToRun.add(effectFn)
-      }
-    })
+  // 只有当操作类型是ADD或DELETE时，才触发与ITERATE_KEY相关联的副作用函数重新执行
+  if (type === TriggerType.ADD || type === TriggerType.DELETE) {
+    // 将于ITERATE_KEY相关联得到副作用函数也添加到effectsToRun
+    iterateEffects &&
+      iterateEffects.forEach((effectFn) => {
+        if (effectFn !== activeEffect) {
+          effectsToRun.add(effectFn)
+        }
+      })
+  }
 
   // 执行所有副作用函数
   effectsToRun.forEach((effectFn) => {
