@@ -1,7 +1,25 @@
-import { ITERATE_KEY, track, trigger, TriggerType } from './effect.js'
+import {
+  ITERATE_KEY,
+  track,
+  trigger,
+  TriggerType,
+  pauseTracking,
+  enableTracking
+} from './effect.js'
+
+// 定义一个Map实例，存储原始值对象到代理对象的映射
+const reactiveMap = new Map()
 
 export function reactive(obj) {
-  return createReactive(obj)
+  // 优先通过原始值对象obj寻找之前创建的代理对象，如果找到，直接返回已有对象
+  const existionProxy = reactiveMap.get(obj)
+  if (existionProxy) return existionProxy
+
+  // 否则，创建新的代理对象
+  const proxy = createReactive(obj)
+  reactiveMap.set(obj, proxy)
+
+  return proxy
 }
 
 export function shallowReactive(obj) {
@@ -16,6 +34,36 @@ export function shallowReadonly(obj) {
   return createReactive(obj, true, true)
 }
 
+const arrayInstrumentations = {}
+;['includes', 'indexOf', 'lastIndexOf'].forEach((method) => {
+  const originMethod = Array.prototype[method]
+  arrayInstrumentations[method] = function (...args) {
+    // this是代理对象，现在代理对象中查找，将结果存储在res中
+    let res = originMethod.apply(this, args)
+
+    if (res === false || res === -1) {
+      // res为false说明该没找到，通过this.raw拿到原始数组，再去其中查找并更新res值
+      res = originMethod.apply(this.raw, args)
+    }
+
+    return res
+  }
+})
+;['push', 'pop', 'shift', 'unshift', 'splice'].forEach((method) => {
+  // 取得原始方法
+  const originMethod = Array.prototype[method]
+  // 重写
+  arrayInstrumentations[method] = function (...args) {
+    // 在调用原始方法前，禁止追踪
+    pauseTracking()
+    // push方法的默认行为
+    let res = originMethod.apply(this, args)
+    // 恢复追踪
+    enableTracking()
+    return res
+  }
+})
+
 // 封装createReactive函数，接收一个参数isShallow，默认false即非浅响应
 function createReactive(obj, isShallow = false, isReadonly = false) {
   return new Proxy(obj, {
@@ -24,6 +72,14 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       // 代理对象可以通过raw属性访问原始数据
       if (key === 'raw') {
         return target
+      }
+
+      // 如果操作的目标对象是数组，并且key存在于arrayInstrumentations上，那么返回定义在其上的值
+      if (
+        Array.isArray(target) &&
+        arrayInstrumentations.hasOwnProperty('key')
+      ) {
+        return Reflect.get(arrayInstrumentations, key, receiver)
       }
 
       // 如果key的类型是symbol，则不进行追踪
