@@ -75,10 +75,7 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
       }
 
       // 如果操作的目标对象是数组，并且key存在于arrayInstrumentations上，那么返回定义在其上的值
-      if (
-        Array.isArray(target) &&
-        arrayInstrumentations.hasOwnProperty('key')
-      ) {
+      if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
         return Reflect.get(arrayInstrumentations, key, receiver)
       }
 
@@ -169,6 +166,8 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
         // 只有当被删除的属性是对象自己的属性并且成功删除时，才触发更新
         trigger(target, key, TriggerType.DELETE)
       }
+
+      return res
     }
   })
 }

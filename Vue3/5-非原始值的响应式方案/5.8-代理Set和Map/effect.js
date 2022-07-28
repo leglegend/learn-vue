@@ -1,4 +1,5 @@
 export const ITERATE_KEY = Symbol('iterate')
+export const MAP_KEY_ITERATE_KEY = Symbol('map')
 export const TriggerType = {
   SET: 'set',
   ADD: 'add',
@@ -113,10 +114,31 @@ export function trigger(target, key, type, newVal) {
     })
 
   // 只有当操作类型是ADD或DELETE时，才触发与ITERATE_KEY相关联的副作用函数重新执行
-  if (type === TriggerType.ADD || type === TriggerType.DELETE) {
+  if (
+    type === TriggerType.ADD ||
+    type === TriggerType.DELETE ||
+    // 如果操作类型是SET，并且目标对象是Map，也应该触发ITERATE_KEY
+    (type === TriggerType.SET &&
+      Object.prototype.toString.call(target) === '[Object Map]')
+  ) {
     // 取得与ITERATE_KEY相关的副作用函数
     const iterateEffects = depsMap.get(ITERATE_KEY)
     // 将于ITERATE_KEY相关联得到副作用函数也添加到effectsToRun
+    iterateEffects &&
+      iterateEffects.forEach((effectFn) => {
+        if (effectFn !== activeEffect) {
+          effectsToRun.add(effectFn)
+        }
+      })
+  }
+
+  // 只有当操作类型是ADD或DELETE，并且target是Map类型是，才触发MAP_KEY_ITERATE_KEY
+  if (
+    (type === TriggerType.ADD || type === TriggerType.DELETE) &&
+    Object.prototype.toString.call(target) === '[Object Map]'
+  ) {
+    // 取得与MAP_KEY_ITERATE_KEY相关的副作用函数
+    const iterateEffects = depsMap.get(MAP_KEY_ITERATE_KEY)
     iterateEffects &&
       iterateEffects.forEach((effectFn) => {
         if (effectFn !== activeEffect) {

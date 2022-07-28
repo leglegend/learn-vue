@@ -104,6 +104,8 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
         // 只有当被删除的属性是对象自己的属性并且成功删除时，才触发更新
         trigger(target, key, TriggerType.DELETE)
       }
+
+      return res
     }
   })
 }

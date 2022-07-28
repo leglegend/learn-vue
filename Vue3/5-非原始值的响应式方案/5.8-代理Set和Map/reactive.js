@@ -1,5 +1,6 @@
 import {
   ITERATE_KEY,
+  MAP_KEY_ITERATE_KEY,
   track,
   trigger,
   TriggerType,
@@ -131,6 +132,93 @@ const mutableInstrumentations = {
     }
 
     return res
+  },
+  forEach(callback, thisArg) {
+    // wrap函数用来把可代理的值转换为响应式数据
+    const wrap = (val) => (typeof val === 'object' ? reactive(val) : val)
+    const target = this.raw
+    track(target, ITERATE_KEY)
+    target.forEach((v, k) => {
+      // 手动调用callback，用wrap函数包裹value和key后再传给callback
+      callback.call(thisArg, wrap(v), wrap(k), this)
+    })
+  },
+  [Symbol.iterator]: iteratorMethod,
+  entries: iteratorMethod,
+  values: valuesIteratorMethod,
+  keys: keysIteratorMethod
+}
+
+function iteratorMethod() {
+  const target = this.raw
+  // 获取原始值的迭代器
+  const itr = target[Symbol.iterator]()
+
+  const wrap = (val) => (typeof val === 'object' ? reactive(val) : val)
+
+  track(target, ITERATE_KEY)
+
+  return {
+    next() {
+      // 调用原始迭代器的方法获得vlue和done
+      const { value, done } = itr.next()
+
+      return {
+        // 如果value不是undefined，则对其进行包装
+        value: value ? [wrap(value[0]), wrap[value[1]]] : value,
+        done
+      }
+    },
+    [Symbol.iterator]() {
+      return this
+    }
+  }
+}
+
+function valuesIteratorMethod() {
+  const target = this.raw
+  const itr = target.values()
+
+  const wrap = (val) => (typeof val === 'object' ? reactive(val) : val)
+
+  track(target, ITERATE_KEY)
+
+  return {
+    next() {
+      const { value, done } = itr.next()
+      return {
+        // value是值，而非键值对，所以只需要包裹value即可
+        value: wrap(value),
+        done
+      }
+    },
+    [Symbol.iterator]() {
+      return this
+    }
+  }
+}
+
+function keysIteratorMethod() {
+  const target = this.raw
+  const itr = target.values()
+
+  const wrap = (val) => (typeof val === 'object' ? reactive(val) : val)
+
+  // 调用track函数追踪依赖，在副作用函数与MAP_KEY_ITERATE_KEY之间建立联系
+  track(target, MAP_KEY_ITERATE_KEY)
+
+  return {
+    next() {
+      const { value, done } = itr.next()
+      return {
+        // value是值，而非键值对，所以只需要包裹value即可
+        value: wrap(value),
+        done
+      }
+    },
+    [Symbol.iterator]() {
+      return this
+    }
   }
 }
 
