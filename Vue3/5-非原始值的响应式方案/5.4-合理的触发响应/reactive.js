@@ -37,7 +37,7 @@ export function reactive(obj) {
 
       // target === receiver.raw 说明receiver时target的代理对象
       if (target === receiver.raw) {
-        // 比较新值和旧值，只要当不全等的时候才触发响应，并派出NaN的情况
+        // 比较新值和旧值，只要当不全等的时候才触发响应，并排除NaN的情况
         if (oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
           // 把副作用函数从桶里取出并执行，将type传递给trigger
           trigger(target, key, type)

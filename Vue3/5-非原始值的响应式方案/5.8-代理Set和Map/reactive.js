@@ -121,6 +121,15 @@ const mutableInstrumentations = {
 
     return res
   },
+  clear() {
+    const target = this.raw
+    const hadItems = target.size !== 0
+    const res = target.clear()
+    if (hadItems) {
+      trigger(target, null, TriggerType.CLEAR)
+    }
+    return res
+  },
   delete(key) {
     const target = this.raw
     const hadKey = target.has(key)
