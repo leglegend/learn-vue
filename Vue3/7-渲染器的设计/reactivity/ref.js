@@ -1,6 +1,6 @@
 import { reactive } from './reactive.js'
 
-function ref(val) {
+export function ref(val) {
   const wrapper = {
     value: val
   }
@@ -13,7 +13,7 @@ function ref(val) {
   return reactive(wrapper)
 }
 
-function toRef(obj, key) {
+export function toRef(obj, key) {
   const wrapper = {
     get value() {
       return obj[key]
@@ -30,7 +30,7 @@ function toRef(obj, key) {
   return wrapper
 }
 
-function toRefs(obj) {
+export function toRefs(obj) {
   const ret = {}
   for (const key in obj) {
     ret[key] = toRef(obj, key)
@@ -39,7 +39,7 @@ function toRefs(obj) {
 }
 
 // 解包ref对象
-function proxyRefs(target) {
+export function proxyRefs(target) {
   return new Proxy(target, {
     get(target, key, receiver) {
       value = Reflect.get(target, key, receiver)
