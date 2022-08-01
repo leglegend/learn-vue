@@ -19,7 +19,7 @@ export function createRenderer(options) {
     unmount
   } = options
 
-  function patch(n1, n2, container) {
+  function patch(n1, n2, container, achor) {
     // 如果n1存在，对比n1n2的类型
     if (n1 && n1.type !== n2.type) {
       // 如果新旧vnode类型不同，则直接将旧vnode卸载
@@ -34,7 +34,7 @@ export function createRenderer(options) {
     if (typeof type === 'string') {
       // 如果n1不存在，意味着挂载，则调用mountElement函数完成挂载
       if (!n1) {
-        mountElement(n2, container)
+        mountElement(n2, container, achor)
       } else {
         // n1存在，意味着打补丁
         patchElement(n1, n2)
@@ -107,7 +107,7 @@ export function createRenderer(options) {
     }
 
     // 将元素添加到容器中
-    insert(el, container)
+    insert(el, container, achor)
   }
 
   function patchElement(n1, n2) {
@@ -157,15 +157,32 @@ export function createRenderer(options) {
         for (let i = 0; i < newChildren.length; i++) {
           const newVNode = newChildren[i]
 
+          // 在第一层循环中定义变量find，代表是否在旧的一组子节点找到可复用的节点
+          let find = false
+
           for (let j = 0; j < oldChildren.length; j++) {
             const oldVNode = oldChildren[j]
 
             // 如果找到了具有相同key值的两个节点，说明可以复用，但仍需patch更新
             if (newVNode.key === oldVNode.key) {
+              // 找到了可复用的点
+              find = true
               patch(oldVNode, newVNode, container)
 
               if (j < lastIndex) {
                 // 如果当前找到的节点在旧children中的索引值小于最大索引值lastIndex，则需要移动
+
+                // 获取newVNode的前一个vnode，即prevVNode
+                const prevVNode = newChildren[i - 1]
+                // 如果prevVNode不存在，则说明当前newVNode是第一个节点，不需要移动
+                if (prevVNode) {
+                  // 我们需要将newVNode对应的DOM移动到prevVNode对应DOM的后面
+                  // 需要获取prevVNode对应DOM的下一个兄弟节点，并将其作为锚点
+                  const anchor = prevVNode.el.nextSibling
+
+                  // 调用insert方法将newVNode对应的真实DOM插入到锚点元素的前面
+                  insert(newVNode.el, container, anchor)
+                }
               } else {
                 // 如果当前节点在旧children中的索引不小于最大索引，则更新lastIndex
                 lastIndex = j
@@ -173,29 +190,35 @@ export function createRenderer(options) {
               break
             }
           }
-        }
 
-        // >>
+          // 如果find为false，说明没有找到可复用的节点，新增节点
+          if (!find) {
+            // 获取newVNode的前一个vnode节点
+            const prevVNode = newChildren[i - 1]
+            let anchor = null
 
-        const oldLen = oldChildren.length
-        const newLen = newChildren.length
+            if (prevVNode) {
+              // 如果有prevVNode，则使用它的下一个兄弟节点作为锚点
+              anchor = prevVNode.el.nextSibling
+            } else {
+              // 如果没有，则说明挂载的节点是第一个，使用firstChild作为锚点
+              anchor = container.firstChild
+            }
 
-        // 取两组子节点较短的那一组长度
-        const commonLength = Math.min(oldLen, newLen)
-
-        for (let i = 0; i < commonLength; i++) {
-          patch(oldChildren[i], newChildren[i], container)
-        }
-
-        if (newLen > oldLen) {
-          // 说明有新节点需要挂载
-          for (let i = commonLength; i < newLen; i++) {
-            patch(null, newChildren[i], container)
+            // 挂载newVNode
+            patch(null, newVNode, container, anchor)
           }
-        } else if (oldLen > newLen) {
-          // 说明有旧子节点需要卸载
-          for (let i = commonLength; i < oldLen; i++) {
-            unmount(oldChildren[i])
+        }
+
+        // 遍历一遍旧子节点
+        for (let i = 0; i < oldChildren.length; i++) {
+          const oldVNode = oldChildren[i]
+          // 拿旧子节点去新一组子节点中寻找具有相同的key的节点
+          const has = newChildren.find((vnode) => vnode.key === oldVNode.key)
+
+          if (!has) {
+            // 如果没有找到，需要卸载该点
+            unmount(oldVNode)
           }
         }
       } else {
