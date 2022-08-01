@@ -148,11 +148,56 @@ export function createRenderer(options) {
       // 判断旧子节点是否也是一组子节点
       if (Array.isArray(n1.children)) {
         // diff算法
+        const oldChildren = n1.children
+        const newChildren = n2.children
 
-        // 旧子节点全部卸载
-        n1.children.forEach((c) => unmount(c))
-        // 新子节点全部挂载
-        n2.children.forEach((c) => patch(null, c, container))
+        // 用来存储寻找过程中的最大索引值
+        let lastIndex = 0
+
+        for (let i = 0; i < newChildren.length; i++) {
+          const newVNode = newChildren[i]
+
+          for (let j = 0; j < oldChildren.length; j++) {
+            const oldVNode = oldChildren[j]
+
+            // 如果找到了具有相同key值的两个节点，说明可以复用，但仍需patch更新
+            if (newVNode.key === oldVNode.key) {
+              patch(oldVNode, newVNode, container)
+
+              if (j < lastIndex) {
+                // 如果当前找到的节点在旧children中的索引值小于最大索引值lastIndex，则需要移动
+              } else {
+                // 如果当前节点在旧children中的索引不小于最大索引，则更新lastIndex
+                lastIndex = j
+              }
+              break
+            }
+          }
+        }
+
+        // >>
+
+        const oldLen = oldChildren.length
+        const newLen = newChildren.length
+
+        // 取两组子节点较短的那一组长度
+        const commonLength = Math.min(oldLen, newLen)
+
+        for (let i = 0; i < commonLength; i++) {
+          patch(oldChildren[i], newChildren[i], container)
+        }
+
+        if (newLen > oldLen) {
+          // 说明有新节点需要挂载
+          for (let i = commonLength; i < newLen; i++) {
+            patch(null, newChildren[i], container)
+          }
+        } else if (oldLen > newLen) {
+          // 说明有旧子节点需要卸载
+          for (let i = commonLength; i < oldLen; i++) {
+            unmount(oldChildren[i])
+          }
+        }
       } else {
         // 旧子节点是文本或者无，将容器清空，然后逐个挂载
         setElementText(container, '')
