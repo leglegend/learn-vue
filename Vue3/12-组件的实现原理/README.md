@@ -4,3 +4,17 @@
 组件需要返回一个render函数
 挂载组件时运行render函数，其返回值是一个虚拟DOM，挂载该虚拟DOM
 ## 组件状态与自更新
+在组件中定义data函数，调用时能够返回状态数据
+将data放回的对象通过reactive变为响应式数据state
+调用render函数时，通过call将state传过去，这样render函数可通过this拿到state
+将render函数放进effect中，并在effect中调用render函数，返回虚拟DOM，通过渲染器将虚拟DOM渲染到页面上，当状态值发生变化时，会重新渲染
+effect可以设置一个调度器，值发生变化时将副作用函数放入微队列执行
+
+## 组件实例与组件生命周期
+组件实例本质上就是一个对象，我们把state，subTree放进组件实例中，再添加一个isMounted属性，默认false
+在更新时判断isMounted，ture则挂载，false则更新
+更新时，重新调用render函数生成的subTree作为新节点，之前的subTree作为老节点
+最后更新实例中的subTree属性
+生命周期函数实际上是从option里拿到函数，在合适的时间调用(并绑定上state，使this指向state)
+
+## props与组件的被动更新

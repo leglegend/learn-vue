@@ -145,23 +145,74 @@ export function createRenderer(options) {
     // 通过vnode获取组件的选项对象，即vnode.type
     const componentOptions = vnode.type
 
-    // 获取组件的渲染函数render
-    const { render, data } = componentOptions
+    // 获取组件的渲染函数render，data和生命周期函数
+    const {
+      render,
+      data,
+      beforeCreat,
+      created,
+      beforeMount,
+      mounted,
+      beforeUpdate,
+      updated
+    } = componentOptions
+
+    beforeCreat && beforeCreat()
 
     // 调用data函数得到原始数据，并调用reactive函数将其包装为响应式
     const state = reactive(data())
 
+    // 定义组件实例，一个组件实例本质上是一个对象，它包含组件相关的状态信息
+    const instance = {
+      // 组件自身的状态，即data
+      state,
+      // 一个布尔值，表示组件是否已被挂载
+      isMounted: false,
+      // 组件所渲染的内容，即子树subTree
+      subTree: null
+    }
+
+    // 将组件设置到vnode上，用于后续更新
+    vnode.component = instance
+
+    created && created.call(state)
+
     // 将组件的render函数包装到effect内
+    effect(
+      () => {
+        // 执行渲染函数，获取组件要渲染的内容，即render函数返回的虚拟DOM
+        // 调用render函数时，将其this设置为state
+        // 从而render函数内部可以通过this访问组件自身状态数据
+        const subTree = render.call(state, state)
 
-    effect(() => {
-      // 执行渲染函数，获取组件要渲染的内容，即render函数返回的虚拟DOM
-      // 调用render函数时，将其this设置为state
-      // 从而render函数内部可以通过this访问组件自身状态数据
-      const subTree = render.call(state, state)
+        // 检查组件是否已被挂载
+        if (!instance.isMounted) {
+          beforeMount && beforeMount.call(state)
 
-      // 调用patch函数来挂载组件所描述的内容
-      patch(null, subTree, container, anchor)
-    })
+          // 初次挂载，调用patch函数第一个参数为null
+          patch(null, subTree, container, anchor)
+          // 将isMounted设置为true，表示已挂载
+          instance.isMounted = true
+
+          mounted && mounted.call(state)
+        } else {
+          beforeUpdate && beforeUpdate.call(state)
+
+          // 组件已被挂载，需要更新
+          // patch的第一个参数为组件上一次渲染的子树
+          patch(instance.subTree, subTree, container, anchor)
+
+          updated && updated.call(state)
+        }
+
+        // 更新组件实例的子树
+        instance.subTree = subTree
+      },
+      {
+        // 通过调度器执行，放进微任务队列
+        scheduler: queueJob
+      }
+    )
   }
 
   function patchChildren(n1, n2, container) {
@@ -392,6 +443,7 @@ export function createRenderer(options) {
   }
 }
 
+// 返回最长递增子序列
 function lis(nums) {
   const lng = nums.length
   let dp = new Array(lng).fill(0).map((v, i) => [i])
@@ -413,4 +465,32 @@ function lis(nums) {
   }
 
   return dp[maxIndex]
+}
+
+// 任务缓存队列，用一个Set数据结构表示，可自动对任务去重
+const queue = new Set()
+// 一个标志，代表是否正在刷新任务队列
+let isFlushing = false
+// 创建一个立即resolve的Promise实例
+const p = Promise.resolve()
+
+// 调度器的主要函数，用来将一个任务添加到缓冲队列中，并开始刷新队列
+function queueJob(job) {
+  // 将job添加到任务队列中
+  queue.add(job)
+  // 如果还没开始刷新队列，则刷新之
+  if (!isFlushing) {
+    isFlushing = true
+
+    p.then(() => {
+      try {
+        // 执行任务队列中的任务
+        queue.forEach((job) => job())
+      } finally {
+        // 重置状态
+        isFlushing = false
+        queue.clear()
+      }
+    })
+  }
 }
