@@ -77,6 +77,23 @@ export function createRenderer(options) {
         // 如果旧vnode存在，更新children
         patchChildren(n1, n2, container)
       }
+    } else if (typeof type === 'object' && type.__isTeleport) {
+      // 组件选项中如果存在__isTeleport标识，证明他是Teleport组件
+      // 调用Teleport组件选项中的process函数将控制权交接出去
+      // 传递给process函数的第五个参数时渲染器的一些内部方法
+      type.process(n1, n2, container, anchor, {
+        patch,
+        patchChildren,
+        unmount,
+        // 用来移动被Teleport的内容
+        move(vnode, container, anchor) {
+          insert(
+            vnode.component ? vnode.component.subTree.el : vnode.el,
+            container,
+            anchor
+          )
+        }
+      })
     } else if (typeof type === 'object' || typeof type === 'function') {
       // type为object，则n2描述的是组件
       if (!n1) {
@@ -119,6 +136,13 @@ export function createRenderer(options) {
         // 设置属性
         patchProps(el, key, null, vnode.props[key])
       }
+    }
+
+    // 判断一个VNode是否需要过度
+    const needTransition = vnode.transition
+    if (needTransition) {
+      // 调用transition.beforeEnter钩子，并将DOM元素作为参数传递
+      vnode.transition.beforeEnter(el)
     }
 
     // 将元素添加到容器中

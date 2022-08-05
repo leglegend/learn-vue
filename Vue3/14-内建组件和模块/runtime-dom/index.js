@@ -92,6 +92,9 @@ export const renderer = createRenderer({
   },
   // 卸载
   unmount(vnode) {
+    // 判断VNode是否需要过度
+    const needTransition = vnode.transition
+
     // 在卸载时，如果卸载的vnode类型为Fragment，则需要卸载其children
     if (vnode.type === Fragement) {
       vnode.children.forEach((c) => unmount(c))
@@ -113,7 +116,18 @@ export const renderer = createRenderer({
     const parent = vnode.el.parentNode
 
     // 调用removeChild移除元素
-    if (parent) parent.removeChild(vnode.el)
+    if (parent) {
+      // 将卸载动作封装到performRemove函数中
+      const performRemove = () => parent.removeChild(vnode.el)
+
+      if (needTransition) {
+        // 如果需要过度，将元素和performRemove函数当作参数传入transition.leave钩子
+        vnode.transition.leave(vnode.el, performRemove)
+      } else {
+        // 不需要过度，立即卸载
+        performRemove()
+      }
+    }
   }
 })
 
