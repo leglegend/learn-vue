@@ -80,8 +80,13 @@ export function createRenderer(options) {
     } else if (typeof type === 'object' || typeof type === 'function') {
       // type为object，则n2描述的是组件
       if (!n1) {
-        // 挂载组件
-        mountComponent(n2, container, anchor)
+        // 如果该组件已被KeepAlive，则不会重新挂载它，而是调用_activate标识激活
+        if (n2.keptAlive) {
+          n2.keepAliveInstance._activate(n2, container, anchor)
+        } else {
+          // 挂载组件
+          mountComponent(n2, container, anchor)
+        }
       } else {
         // 更新组件
         patchComponent(n1, n2, anchor)
@@ -197,7 +202,23 @@ export function createRenderer(options) {
       // 将插槽添加到组件实例中
       slots,
       // 用来通过onMounted函数注册声明周期钩子函数
-      mounted: []
+      mounted: [],
+      // 只有KeepAlive组件的实例下会有keepAliveCtx属性
+      keepAliveCtx: null
+    }
+
+    // 检查当前要挂载的组件是否时KeepAlive组件
+    const isKeepAlive = vnode.type.__isKeepAlive
+    if (isKeepAlive) {
+      // 在KeepAlive组件实例上添加keepAliveCtx对象
+      instance.keepAliveCtx = {
+        // move函数用来移动一段vnode
+        move(vnode, container, anchor) {
+          // 本质上时将组件渲染的内容移动到指定容器中，即隐藏容器中
+          insert(vnode.component.subTree.el, container, anchor)
+        },
+        createElement
+      }
     }
 
     // 定义emit函数，它接收两个参数：时间名和事件参数

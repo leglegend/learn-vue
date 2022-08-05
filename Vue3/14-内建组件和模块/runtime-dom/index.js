@@ -97,8 +97,15 @@ export const renderer = createRenderer({
       vnode.children.forEach((c) => unmount(c))
       return
     } else if (typeof vnode.type === 'object') {
-      // 对于组件的卸载，本质上是要卸载组件所渲染的内容，即subTree
-      unmount(vnode.component.subTree)
+      // 判断该组件是否应该被KeepAlive
+      if (vnode.shouldKeepAlive) {
+        // 对于需要被KeepAlive的组件，不应该真的卸载它，儿是调用父组件
+        // 即KeepAlive组件的_deActivated函数使其失活
+        vnode.keepAliveInstance._deActivated(vnode)
+      } else {
+        // 对于组件的卸载，本质上是要卸载组件所渲染的内容，即subTree
+        unmount(vnode.component.subTree)
+      }
       return
     }
 
