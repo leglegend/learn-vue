@@ -1,3 +1,17 @@
+# 编译器核心技术概览
+## 模板DSL的编译器
+模板 -> parse -> AST(抽象语法树)
+parse函数完成对模板的词法分析和语法分析，生成AST
+
+AST -> transform -> JavScript AST
+
+JavScript AST -> generate -> 渲染函数
+
+## paser的实现原理与状态机
+parser：解析器
+transformer：转换器
+generator：生成器
+
 ## 构造AST
 AST具有树形结构
 将解析出来的标签放入一个栈中
