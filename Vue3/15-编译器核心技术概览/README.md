@@ -28,3 +28,5 @@ AST具有树形结构
 ### 进入与退出
 
 ## 将模板AST转为JavaScript AST
+AST需要转换为用于描述渲染函数的JavaScript AST
+渲染函数执行后返回虚拟DOM，就可以用来
