@@ -13,9 +13,7 @@
 [事件相关实例方法](https://github.com/leglegend/learn-vue/tree/master/Vue2/9-%E4%BA%8B%E4%BB%B6%E7%9B%B8%E5%85%B3%E5%AE%9E%E4%BE%8B%E6%96%B9%E6%B3%95) 
 [生命周期相关实例方法](https://github.com/leglegend/learn-vue/tree/master/Vue2/10-%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E7%9B%B8%E5%85%B3%E5%AE%9E%E4%BE%8B%E6%96%B9%E6%B3%95)  
 [全局API实现原理](https://github.com/leglegend/learn-vue/tree/master/Vue2/11-%E5%85%A8%E5%B1%80API%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)  
-
 [生命周期](https://github.com/leglegend/learn-vue/tree/master/Vue2/12-%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F)  
-
 [指令的实现原理](https://github.com/leglegend/learn-vue/tree/master/Vue2/13-%E6%8C%87%E4%BB%A4%E7%9A%84%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)  
 [过滤器](https://github.com/leglegend/learn-vue/tree/master/Vue2/14-%E8%BF%87%E6%BB%A4%E5%99%A8) 
 [Vuex原理分析](https://github.com/leglegend/learn-vue/tree/master/Vue2/15-Vuex%E5%8E%9F%E7%90%86%E5%88%86%E6%9E%90) 
